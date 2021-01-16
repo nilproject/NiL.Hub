@@ -1,0 +1,82 @@
+﻿using System;
+
+namespace NiL.Exev
+{
+    public sealed partial class ExpressionEvaluator
+    {<#
+        var operators = new string[][]
+        {
+            new string[] { "Mul", "*", "unchecked" },
+            new string[] { "Add", "+", "unchecked" },
+            new string[] { "Sub", "-", "unchecked" },
+            new string[] { "Div", "/", "unchecked" },
+            new string[] { "Mod", "%", "unchecked" },
+            new string[] { "And", "&", "unchecked" },
+            new string[] { "Or",  "|", "unchecked" },
+            new string[] { "Xor", "^", "unchecked" },
+
+            new string[] { "Mul", "*", "checked" },
+            new string[] { "Add", "+", "checked" },
+            new string[] { "Sub", "-", "checked" },
+            
+            new string[] { "Equal", "==", "unchecked" },
+            new string[] { "NotEqual", "!=", "unchecked" },
+            new string[] { "More", ">", "unchecked" },
+            new string[] { "Less", "<", "unchecked" },
+            new string[] { "MoreOrEqual", ">=", "unchecked" },
+            new string[] { "LessOrEqual", "<=", "unchecked" },
+        };
+
+        for (var i = 0; i < operators.Length; i++)
+        {#>            
+        private static object <#= char.ToLower(operators[i][0][0]) + operators[i][0].Substring(1, operators[i][0].Length - 1) + "_" + operators[i][2] #>(object left, object right, Type type)
+        {
+            <#= operators[i][2] #>
+            {
+                switch (Type.GetTypeCode(type))
+                {
+                    case TypeCode.Int64: return (long)left <#= operators[i][1] #> (long)right;
+                    case TypeCode.UInt64: return (ulong)left <#= operators[i][1] #> (ulong)right;
+                    case TypeCode.Int32: return (int)left <#= operators[i][1] #> (int)right;
+                    case TypeCode.UInt32: return (uint)left <#= operators[i][1] #> (uint)right;
+                    case TypeCode.Int16: return (short)left <#= operators[i][1] #> (short)right;
+                    case TypeCode.UInt16: return (ushort)left <#= operators[i][1] #> (ushort)right;
+                    case TypeCode.Byte: return (byte)left <#= operators[i][1] #> (byte)right;
+                    case TypeCode.SByte: return (sbyte)left <#= operators[i][1] #> (sbyte)right;
+
+                    default: throw new NotImplementedException("<#= operators[i][0] #> for " + type);
+                }
+            }
+        }
+    <#}
+                operators = new string[][]
+                {
+                    
+                    new string[] { "RightShift", ">>", "unchecked" },
+                    new string[] { "LeftShift", "<<", "unchecked" },
+                };
+
+        for (var i = 0; i < operators.Length; i++)
+        {#>            
+        private static object <#= char.ToLower(operators[i][0][0]) + operators[i][0].Substring(1, operators[i][0].Length - 1) + "_" + operators[i][2] #>(object left, object right, Type type)
+        {
+            <#= operators[i][2] #>
+            {
+                switch (Type.GetTypeCode(type))
+                {
+                    case TypeCode.Int64: return (long)left <#= operators[i][1] #> (int)right;
+                    case TypeCode.UInt64: return (ulong)left <#= operators[i][1] #> (int)right;
+                    case TypeCode.Int32: return (int)left <#= operators[i][1] #> (int)right;
+                    case TypeCode.UInt32: return (uint)left <#= operators[i][1] #> (int)right;
+                    case TypeCode.Int16: return (short)left <#= operators[i][1] #> (int)right;
+                    case TypeCode.UInt16: return (ushort)left <#= operators[i][1] #> (int)right;
+                    case TypeCode.Byte: return (byte)left <#= operators[i][1] #> (int)right;
+                    case TypeCode.SByte: return (sbyte)left <#= operators[i][1] #> (int)right;
+
+                    default: throw new NotImplementedException("<#= operators[i][0] #> for " + type);
+                }
+            }
+        }
+    <#}#>
+    }
+}
