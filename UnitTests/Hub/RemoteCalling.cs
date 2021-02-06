@@ -6,7 +6,7 @@ using System.Threading;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NiL.Hub;
 
-namespace Tests.Hubs
+namespace UnitTests.Hub
 {
     [TestClass]
     public sealed class RemoteCalling

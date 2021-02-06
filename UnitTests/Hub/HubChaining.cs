@@ -7,7 +7,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Newtonsoft.Json.Bson;
 using NiL.Hub;
 
-namespace Tests.Hubs
+namespace UnitTests.Hub
 {
     [TestClass]
     public sealed class HubChaining
