@@ -2,8 +2,6 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
-using System.Linq.Expressions;
-using System.Net.Sockets;
 using System.Threading;
 using NiL.Exev;
 
@@ -93,24 +91,27 @@ namespace NiL.Hub
                         if (packageType == PackageType.Hello)
                             writeHelloResponse();
 
-                        // to this about all
-                        forAllHubs((_, otherHub) =>
+                        if (_localHub.PathThrough)
                         {
-                            if (RemoteHub.Id != otherHub.Id)
+                            // to this about all
+                            forAllHubs((_, otherHub) =>
                             {
-                                writeRegisterHub(otherHub);
-                            }
-                        });
-
-                        doAfter.Add(() =>
-                        {
-                            // to all about this
-                            forAllHubConnections(false, hubConn => // only those that are connected directly 
-                            {
-                                hubConn.writeRegisterHub(RemoteHub);
-                                return true;
+                                if (RemoteHub.Id != otherHub.Id)
+                                {
+                                    writeRegisterHub(otherHub);
+                                }
                             });
-                        });
+
+                            doAfter.Add(() =>
+                            {
+                                // to all about this
+                                forAllHubConnections(false, hubConn => // only those that are connected directly 
+                                {
+                                    hubConn.writeRegisterHub(RemoteHub);
+                                    return true;
+                                });
+                            });
+                        }
 
                         //Thread.CurrentThread.Name = "Workder for connection from \"" + LocalHub.Name + "\" (" + LocalHub.Id + ") to \"" + RemoteHub.Name + "\" (" + RemoteHub.Id + ")";
                         State = HubConnectionState.Active;
@@ -137,14 +138,17 @@ namespace NiL.Hub
 
                     var hub = _localHub.HubIsAvailableThrough(this, hubId, distance, hubName);
 
-                    doAfter.Add(() =>
+                    if (_localHub.PathThrough)
                     {
-                        forAllHubConnections(false, hubConn => // only those that are connected directly 
+                        doAfter.Add(() =>
                         {
-                            hubConn.writeRegisterHub(hub);
-                            return true;
+                            forAllHubConnections(false, hubConn => // only those that are connected directly 
+                            {
+                                hubConn.writeRegisterHub(hub);
+                                return true;
+                            });
                         });
-                    });
+                    }
 
                     break;
                 }
@@ -215,7 +219,47 @@ namespace NiL.Hub
                                 }
                             }
 
-                            if (wPos == hubs.Length) // Все хабы новые. Нужно передать весь пакет дальше
+                            if (_localHub.PathThrough)
+                            {
+                                if (wPos == hubs.Length) // Все хабы новые. Нужно передать весь пакет дальше
+                                {
+                                    var pos = _inputBuffer.Position;
+                                    _inputBuffer.Position = packageStart;
+                                    var blob = _inputBufferReader.ReadBytes((int)(pos - packageStart));
+
+                                    doAfter.Add(() =>
+                                    {
+                                        forAllHubConnections(false, connection =>
+                                        {
+                                            connection.writeBlob(blob);
+                                            return true;
+                                        });
+                                    });
+                                }
+                                else if (wPos > 0) // О части хабов мы уже знали. Нужно сформировать новый пакет и передать дальше
+                                {
+                                    Array.Resize(ref hubs, wPos);
+                                    Array.Resize(ref interfaceIds, wPos);
+                                    doAfter.Add(() =>
+                                    {
+                                        forAllHubConnections(false, connection => // only those that are connected directly
+                                        {
+                                            connection.writeRegisterInterface(hubs, interfaceName, interfaceIds);
+                                            return true;
+                                        });
+                                    });
+                                }
+                            }
+                        }
+                        else // Интерфейс неизвестен. Нужно создать его и передать весь пакет как есть дальше
+                        {
+                            @interface = new SharedInterface(interfaceName);
+                            for (var i = 0; i < hubs.Length; i++)
+                                tryAddInterfaceToHubOrWriteError(@interface, hubs[i], interfaceIds[i]);
+
+                            _localHub._knownInterfaces.Add(interfaceName, @interface);
+
+                            if (_localHub.PathThrough)
                             {
                                 var pos = _inputBuffer.Position;
                                 _inputBuffer.Position = packageStart;
@@ -230,40 +274,6 @@ namespace NiL.Hub
                                     });
                                 });
                             }
-                            else if (wPos > 0) // О части хабов мы уже знали. Нужно сформировать новый пакет и передать дальше
-                            {
-                                Array.Resize(ref hubs, wPos);
-                                Array.Resize(ref interfaceIds, wPos);
-                                doAfter.Add(() =>
-                                {
-                                    forAllHubConnections(false, connection => // only those that are connected directly
-                                    {
-                                        connection.writeRegisterInterface(hubs, interfaceName, interfaceIds);
-                                        return true;
-                                    });
-                                });
-                            }
-                        }
-                        else // Интерфейс неизвестен. Нужно создать его и передать весь пакет как есть дальше
-                        {
-                            @interface = new SharedInterface(interfaceName);
-                            for (var i = 0; i < hubs.Length; i++)
-                                tryAddInterfaceToHubOrWriteError(@interface, hubs[i], interfaceIds[i]);
-
-                            _localHub._knownInterfaces.Add(interfaceName, @interface);
-
-                            var pos = _inputBuffer.Position;
-                            _inputBuffer.Position = packageStart;
-                            var blob = _inputBufferReader.ReadBytes((int)(pos - packageStart));
-
-                            doAfter.Add(() =>
-                            {
-                                forAllHubConnections(false, connection =>
-                                {
-                                    connection.writeBlob(blob);
-                                    return true;
-                                });
-                            });
                         }
                     }
 
@@ -282,6 +292,13 @@ namespace NiL.Hub
                     }
                     else
                     {
+                        if (!_localHub.PathThrough)
+                        {
+                            _inputBuffer.Position += size;
+                            writeError(ErrorCode.UnknownHub, "Unknown hub #" + receiverId);
+                            break;
+                        }
+
                         var headerSize = (int)(_inputBuffer.Position - packageStart);
                         _inputBuffer.Position = packageStart;
                         var blob = _inputBufferReader.ReadBytes(size + headerSize);
@@ -335,6 +352,14 @@ namespace NiL.Hub
                     break;
                 }
 
+                case PackageType.Error:
+                {
+                    var errorCode = _inputBufferReader.ReadInt32();
+                    var message = _inputBufferReader.ReadString();
+                    // TODO
+                    break;
+                }
+
                 default: throw new NotImplementedException(packageType.ToString());
             }
         }
@@ -377,6 +402,7 @@ namespace NiL.Hub
                 {
                     foreach (var hubId in unavailableHubs)
                         hubConn.writeUnRegisterHub(hubId);
+
                     return true;
                 });
             }

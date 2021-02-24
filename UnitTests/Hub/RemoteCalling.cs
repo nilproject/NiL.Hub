@@ -6,7 +6,7 @@ using System.Threading;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NiL.Hub;
 
-namespace UnitTests.Hub
+namespace UnitTests.HubTests
 {
     [TestClass]
     public sealed class RemoteCalling
@@ -73,13 +73,14 @@ namespace UnitTests.Hub
         }
 
         [TestMethod]
-        [Timeout(1000)]
+        //[Timeout(1000)]
         public void RemoteCallWithMediator()
         {
             using var hub1 = new Hub(777005, "hub 1");
             var endpoint1 = new IPEndPoint(IPAddress.Loopback, 4500);
 
             using var hub2 = new Hub(777006, "hub 2");
+            hub2.PathThrough = true;
             var endpoint2 = new IPEndPoint(IPAddress.Loopback, 4501);
 
             using var hub3 = new Hub(777007, "hub 3");

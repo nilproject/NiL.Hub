@@ -9,6 +9,9 @@ namespace NiL.Hub
     {
         string Name { get; }
         long Id { get; }
+        IEnumerable<IPEndPoint> EndPoints { get; }
+
+        bool PathThrough { get; set; }
 
         ISharedInterface<TInterface> Get<TInterface>() where TInterface : class;
 

@@ -7,7 +7,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Newtonsoft.Json.Bson;
 using NiL.Hub;
 
-namespace UnitTests.Hub
+namespace UnitTests.HubTests
 {
     [TestClass]
     public sealed class HubChaining
@@ -20,10 +20,12 @@ namespace UnitTests.Hub
         public void SimpleChain()
         {
             using var hub0 = new Hub("hub 0");
+            hub0.PathThrough = true;
             var hub0EndPoint = new IPEndPoint(IPAddress.Loopback, 4500);
             hub0.StartListening(hub0EndPoint);
 
             using var hub1 = new Hub("hub 1");
+            hub1.PathThrough = true;
             var hub1EndPoint = new IPEndPoint(IPAddress.Loopback, 4501);
             hub1.StartListening(hub1EndPoint);
 
@@ -52,14 +54,17 @@ namespace UnitTests.Hub
         public void ConnectInTheMiddleOfChain()
         {
             using var hub0 = new Hub("hub 0");
+            hub0.PathThrough = true;
             var hub0EndPoint = new IPEndPoint(IPAddress.Loopback, 4500);
             hub0.StartListening(hub0EndPoint);
 
             using var hub1 = new Hub("hub 1");
+            hub1.PathThrough = true;
             var hub1EndPoint = new IPEndPoint(IPAddress.Loopback, 4501);
             hub1.StartListening(hub1EndPoint);
 
             using var hub2 = new Hub("hub 2");
+            hub2.PathThrough = true;
 
             Task.WaitAll(hub1.Connect(hub0EndPoint),
                          hub2.Connect(hub1EndPoint));
@@ -96,19 +101,23 @@ namespace UnitTests.Hub
         public void DisnnectFromTheMiddleOfChain()
         {
             using var hub0 = new Hub("hub 0");
+            hub0.PathThrough = true;
             var hub0EndPoint = new IPEndPoint(IPAddress.Loopback, 4500);
             hub0.StartListening(hub0EndPoint);
 
             using var hub1 = new Hub("hub 1");
+            hub1.PathThrough = true;
             var hub1EndPoint = new IPEndPoint(IPAddress.Loopback, 4501);
             hub1.StartListening(hub1EndPoint);
 
             using var hub2 = new Hub("hub 2");
+            hub2.PathThrough = true;
 
             Task.WaitAll(hub1.Connect(hub0EndPoint),
                          hub2.Connect(hub1EndPoint));
 
             using var hub3 = new Hub("hub 3");
+            hub3.PathThrough = true;
             hub3.Connect(hub1EndPoint).Wait();
             hub3.Connections.First().Disconnect();
 
@@ -166,15 +175,18 @@ namespace UnitTests.Hub
         public void TwoConnectionsAndYetAnthorHub()
         {
             using var hub0 = new Hub("hub 0");
+            hub0.PathThrough = true;
             var hub0EndPoint = new IPEndPoint(IPAddress.Loopback, 4500);
             hub0.StartListening(hub0EndPoint);
 
             using var hub1 = new Hub("hub 1");
+            hub1.PathThrough = true;
 
             Task.WaitAll(hub1.Connect(hub0EndPoint),
                          hub1.Connect(hub0EndPoint));
 
             using var hub2 = new Hub("hub 2");
+            hub2.PathThrough = true;
             hub2.Connect(hub0EndPoint).Wait();
 
             var hub0KnownHubs = hub0.KnownHubs.ToArray();
@@ -209,15 +221,18 @@ namespace UnitTests.Hub
         public void TwoConnectionsAndYetAnthorHubThenOneDisconnect()
         {
             using var hub0 = new Hub("hub 0");
+            hub0.PathThrough = true;
             var hub0EndPoint = new IPEndPoint(IPAddress.Loopback, 4500);
             hub0.StartListening(hub0EndPoint);
 
             using var hub1 = new Hub("hub 1");
+            hub1.PathThrough = true;
 
             Task.WaitAll(hub1.Connect(hub0EndPoint),
                          hub1.Connect(hub0EndPoint));
 
             using var hub2 = new Hub("hub 2");
+            hub0.PathThrough = true;
             hub2.Connect(hub0EndPoint).Wait();
 
             hub1.Connections.First().Disconnect();

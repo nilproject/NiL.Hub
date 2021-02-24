@@ -26,6 +26,9 @@ namespace NiL.Hub
 
         public IEnumerable<RemoteHub> KnownHubs => _knownHubs.Values;
         public IEnumerable<HubConnection> Connections => _hubsConnctions.Values.SelectMany(x => x);
+        public IEnumerable<IPEndPoint> EndPoints => _listeners.Count > 0 ? _listeners.Select(x => x.Key) : default;
+
+        public bool PathThrough { get; set; }
 
         public Hub()
             : this("<unnamed hub>")
@@ -105,6 +108,8 @@ namespace NiL.Hub
                 foreach (var connection in connections.Value.ToArray())
                     connection.Disconnect();
             }
+
+            GC.SuppressFinalize(this);
         }
 
         public void StartListening(IPEndPoint endPoint)
@@ -114,6 +119,7 @@ namespace NiL.Hub
 
             var listener = new TcpListener(endPoint);
             listener.Start();
+            endPoint = (IPEndPoint)listener.LocalEndpoint;
             try
             {
                 var thread = new Thread(x => listenerWorker(x as TcpListener));
@@ -205,7 +211,7 @@ namespace NiL.Hub
             }
         }
 
-        private RemoteHub GetRemoteHub(long hubId)
+        private RemoteHub getRemoteHub(long hubId)
         {
             lock (_knownHubs)
             {
@@ -315,7 +321,7 @@ namespace NiL.Hub
         {
             return Task.Run(() =>
             {
-                var hub = GetRemoteHub(hubId);
+                var hub = getRemoteHub(hubId);
                 using var connection = hub._connections.GetLockedConenction();
 
                 try
