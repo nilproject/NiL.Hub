@@ -1,9 +1,11 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Net;
 using System.Net.Sockets;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using NiL.Exev;
@@ -12,8 +14,16 @@ namespace NiL.Hub
 {
     public partial class Hub : IHub
     {
+        private sealed class _ToArrayTools
+        {
+            public Func<IList> NewList;
+            public Func<IList, object> ToArray;
+        }
+
         private uint _interfaceIdCounter;
         private volatile int _callResultAwaitId;
+
+        private readonly Dictionary<Type, _ToArrayTools> _toArrayTools = new Dictionary<Type, _ToArrayTools>();
 
         internal readonly TypesMapLayer _commonTypesMap = new TypesMapLayer();
         internal readonly Dictionary<string, SharedInterface> _knownInterfaces = new Dictionary<string, SharedInterface>();
@@ -31,11 +41,11 @@ namespace NiL.Hub
         public bool PathThrough { get; set; }
 
         public Hub()
-            : this("<unnamed hub>")
+            : this("<unnamed hub >")
         { }
 
         public Hub(string name)
-            : this((uint)name.GetHashCode(), name)
+            : this((uint)name.GetHashCode() ^ DateTime.Now.GetHashCode() ^ Environment.TickCount.GetHashCode(), name)
         { }
 
         public Hub(long id, string name)
@@ -319,10 +329,11 @@ namespace NiL.Hub
 
         internal Task Eval(long hubId, int awaitId, byte[] code)
         {
-            return Task.Run(() =>
+            var resultTask = new TaskCompletionSource<object>();
+
+            var task = Task.Run(() =>
             {
                 var hub = getRemoteHub(hubId);
-                using var connection = hub._connections.GetLockedConenction();
 
                 try
                 {
@@ -333,16 +344,123 @@ namespace NiL.Hub
                     object implementation = GetLocalImplementation(deserialized.Parameters[0].Type);
                     var result = _expressionEvaluator.Eval(deserialized.Body, new Parameter(deserialized.Parameters[0], implementation));
 
-                    connection.Value.WriteRetransmitTo(hubId, c => c.WriteResult(awaitId, hub._expressionSerializer.Serialize(Expression.Constant(result))));
+
+
+                    void sendResult()
+                    {
+                        using var connection = hub._connections.GetLockedConenction();
+
+                        connection.Value.WriteRetransmitTo(hubId, c =>
+                            {
+                                c.WriteResult(awaitId, hub._expressionSerializer.Serialize(Expression.Constant(result)));
+                            });
+
+                        connection.Value.FlushOutputBuffer();
+
+                        resultTask.SetResult(result);
+                    }
+
+                    var type = deserialized.ReturnType;
+                    void unwrapAndSend()
+                    {
+                        if (type.IsAssignableTo(typeof(Task)))
+                        {
+                            var awaiterMethod = type.GetMethod("GetAwaiter");
+                            var awaiter = (ICriticalNotifyCompletion)_expressionEvaluator.Eval(Expression.Call(Expression.Constant(result), awaiterMethod));
+                            if (awaiterMethod.ReturnType.IsGenericType)
+                            {
+                                var getResult = awaiter.GetType().GetMethod(nameof(TaskAwaiter.GetResult));
+                                var expr = Expression.Call(Expression.Constant(awaiter), getResult);
+                                awaiter.UnsafeOnCompleted(() =>
+                                {
+                                    type = getResult.ReturnType;
+                                    result = _expressionEvaluator.Eval(expr);
+                                    unwrapAndSend();
+                                });
+                            }
+                            else
+                            {
+                                awaiter.UnsafeOnCompleted(() =>
+                                {
+                                    result = null;
+                                    sendResult();
+                                });
+                            }
+                        }
+                        else
+                        {
+                            if (result is IEnumerable enumerable)
+                            {
+                                if (!result.GetType().IsArray)
+                                {
+                                    var interfaces = result.GetType().GetInterfaces();
+                                    Type @interface = null;
+                                    for (var i = 0; i < interfaces.Length; i++)
+                                    {
+                                        if ((interfaces[i].FullName.StartsWith(typeof(IEnumerable).FullName) || interfaces[i].FullName.StartsWith(typeof(IEnumerable<>).FullName))
+                                            && (@interface == null || interfaces[i].FullName.Length > @interface.FullName.Length))
+                                        {
+                                            @interface = interfaces[i];
+                                        }
+                                    }
+
+                                    var itemType = @interface.IsConstructedGenericType ? @interface.GetGenericArguments()[0] : typeof(object);
+
+                                    if (itemType == typeof(object))
+                                    {
+                                        var list = new List<object>();
+                                        foreach (var item in enumerable)
+                                        {
+                                            list.Add(item);
+                                        }
+
+                                        result = list.ToArray();
+                                    }
+                                    else
+                                    {
+                                        var listType = typeof(List<>).MakeGenericType(itemType);
+
+                                        if (!_toArrayTools.TryGetValue(itemType, out var arrayTools))
+                                        {
+                                            var listPrm = Expression.Parameter(typeof(IList));
+                                            arrayTools = new _ToArrayTools
+                                            {
+                                                NewList = Expression.Lambda<Func<IList>>(Expression.New(listType)).Compile(),
+                                                ToArray = Expression.Lambda<Func<IList, object>>(
+                                                    Expression.Call(Expression.Convert(listPrm, listType), listType.GetMethod("ToArray")), listPrm)
+                                                .Compile(),
+                                            };
+                                        }
+
+                                        var list = arrayTools.NewList();
+                                        foreach (var item in enumerable)
+                                        {
+                                            list.Add(item);
+                                        }
+
+                                        result = arrayTools.ToArray(list);
+                                    }
+                                }
+                            }
+
+                            sendResult();
+                        }
+                    }
+
+                    unwrapAndSend();
                 }
                 catch (Exception e)
                 {
                     Console.Error.WriteLine(e.Message);
-                    connection.Value.WriteRetransmitTo(hubId, c => c.WriteException(awaitId, e));
-                }
+                    resultTask.SetException(e);
 
-                connection.Value.FlushOutputBuffer();
+                    using var connection = hub._connections.GetLockedConenction();
+                    connection.Value.WriteRetransmitTo(hubId, c => c.WriteException(awaitId, e));
+                    connection.Value.FlushOutputBuffer();
+                }
             });
+
+            return resultTask.Task;
         }
 
         internal Task SetResult(int awaitId, byte[] code)

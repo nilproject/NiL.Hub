@@ -1,8 +1,11 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net;
 using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NiL.Hub;
 
@@ -13,14 +16,41 @@ namespace UnitTests.HubTests
     {
         private interface ITestInterface
         {
-            int sum(int a, int b);
+            int Sum(int a, int b);
+            Task<int> GetDelayedValue(int value);
+            IEnumerable<int> GetEnumeratedValues();
         }
 
         private sealed class TestImplementation : ITestInterface
         {
-            public int sum(int a, int b)
+            private readonly Action _callback;
+
+            public TestImplementation()
+                : this(null)
+            { }
+
+            public TestImplementation(Action callback)
+            {
+                _callback = callback;
+            }
+
+            public int Sum(int a, int b)
             {
                 return a + b;
+            }
+
+            public Task<int> GetDelayedValue(int value)
+            {
+                return Task.Delay(1).ContinueWith(x => value);
+            }
+
+            public IEnumerable<int> GetEnumeratedValues()
+            {
+                _callback();
+
+                yield return 1;
+                yield return 2;
+                yield return 3;
             }
         }
 
@@ -63,7 +93,7 @@ namespace UnitTests.HubTests
             var a = 1;
             var b = 2;
             var remoteInterface = hub2.Get<ITestInterface>();
-            var result = remoteInterface.Call(_ => _.sum(a, b));
+            var result = remoteInterface.Call(_ => _.Sum(a, b));
 
             GC.Collect(2);
 
@@ -73,7 +103,7 @@ namespace UnitTests.HubTests
         }
 
         [TestMethod]
-        //[Timeout(1000)]
+        [Timeout(1000)]
         public void RemoteCallWithMediator()
         {
             using var hub1 = new Hub(777005, "hub 1");
@@ -99,13 +129,57 @@ namespace UnitTests.HubTests
             var a = 1;
             var b = 2;
             var remoteInterface = hub3.Get<ITestInterface>();
-            var result = remoteInterface.Call(_ => _.sum(a, b));
+            var result = remoteInterface.Call(_ => _.Sum(a, b));
 
             GC.Collect(2);
 
             result.Wait();
 
             Assert.AreEqual(3, result.Result);
+        }
+
+        [TestMethod]
+        public void CallWithTaskAsResult()
+        {
+            using var hub1 = new Hub(777008, "hub 1");
+
+            var endpoint2 = new IPEndPoint(IPAddress.Loopback, 4501);
+            using var hub2 = new Hub(777009, "hub 2");
+            hub2.StartListening(endpoint2);
+
+            hub1.Connect(endpoint2).Wait();
+
+            hub1.RegisterInterface<ITestInterface>(new TestImplementation()).Wait();
+
+            var value = hub2.Get<ITestInterface>().Call(x => x.GetDelayedValue(123));
+
+            value.Wait();
+
+            Assert.AreEqual(123, value.Result);
+        }
+
+        [TestMethod]
+        public void CallWithEnumerableAsResult()
+        {
+            using var hub1 = new Hub(777008, "hub 1");
+
+            var endpoint2 = new IPEndPoint(IPAddress.Loopback, 4501);
+            using var hub2 = new Hub(777009, "hub 2");
+            hub2.StartListening(endpoint2);
+
+            hub1.Connect(endpoint2).Wait();
+
+            var called = false;
+
+            hub1.RegisterInterface<ITestInterface>(new TestImplementation(() => called = true)).Wait();
+
+            var value = hub2.Get<ITestInterface>().Call(x => x.GetEnumeratedValues());
+
+            value.Wait();
+
+            Assert.IsTrue(called, nameof(called));
+
+            CollectionAssert.AreEqual(new[] { 1, 2, 3 }, value.Result as ICollection);
         }
     }
 }
