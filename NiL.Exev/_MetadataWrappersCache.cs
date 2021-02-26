@@ -67,7 +67,16 @@ namespace NiL.Exev
             var methodBody = (Expression)Expression.Block(variables, body);
 
             if (methodBody.Type.IsValueType)
-                methodBody = Expression.Convert(methodBody, typeof(object));
+            {
+                if (methodBody.Type == typeof(void))
+                {
+                    methodBody = Expression.Block(methodBody, Expression.Constant(null));
+                }
+                else
+                {
+                    methodBody = Expression.Convert(methodBody, typeof(object));
+                }
+            }
 
             method = Expression.Lambda<Func<Stack<object>, object>>(methodBody, _StackPrm).Compile();
             return method;

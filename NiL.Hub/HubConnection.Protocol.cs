@@ -76,7 +76,7 @@ namespace NiL.Hub
                         lock (_localHub._knownHubs)
                         {
                             if (!_localHub._knownHubs.TryGetValue(hubId, out var hub))
-                                _localHub._knownHubs[hubId] = hub = new RemoteHub(new TypesMapLayer(_localHub._commonTypesMap));
+                                _localHub._knownHubs[hubId] = hub = new RemoteHub(new TypesMapLayer(_localHub._registeredInderfaces));
 
                             RemoteHub = hub;
                             hub.Id = hubId;
@@ -90,6 +90,28 @@ namespace NiL.Hub
 
                         if (packageType == PackageType.Hello)
                             writeHelloResponse();
+
+                        foreach (var @interface in _localHub._knownInterfaces)
+                        {
+                            var localReg = @interface.Value.LocalImplementation != null;
+                            var count = @interface.Value.Hubs.Count + (localReg ? 1 : 0);
+
+                            var hubs = new long[count];
+                            var intIds = new uint[count];
+                            for (var i = 0; i < @interface.Value.Hubs.Count; i++)
+                            {
+                                hubs[i] = @interface.Value.Hubs[i].Hub.Id;
+                                intIds[i] = @interface.Value.Hubs[i].InterfaceId;
+                            }
+
+                            if (localReg)
+                            {
+                                hubs[count - 1] = _localHub.Id;
+                                intIds[count - 1] = @interface.Value.LocalId;
+                            }
+
+                            writeRegisterInterface(hubs, @interface.Key, intIds);
+                        }
 
                         if (_localHub.PathThrough)
                         {

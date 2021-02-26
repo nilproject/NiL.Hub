@@ -25,7 +25,7 @@ namespace NiL.Hub
 
         private readonly Dictionary<Type, _ToArrayTools> _toArrayTools = new Dictionary<Type, _ToArrayTools>();
 
-        internal readonly TypesMapLayer _commonTypesMap = new TypesMapLayer();
+        internal readonly TypesMapLayer _registeredInderfaces = new TypesMapLayer();
         internal readonly Dictionary<string, SharedInterface> _knownInterfaces = new Dictionary<string, SharedInterface>();
         internal readonly Dictionary<IPEndPoint, Thread> _listeners = new Dictionary<IPEndPoint, Thread>();
         internal readonly Dictionary<IPEndPoint, List<HubConnection>> _hubsConnctions = new Dictionary<IPEndPoint, List<HubConnection>>();
@@ -53,8 +53,8 @@ namespace NiL.Hub
             Name = name ?? throw new ArgumentNullException(nameof(name));
             Id = id;
 
-            _commonTypesMap = new TypesMapLayer();
-            _expressionDeserializer = new ExpressionDeserializer(_commonTypesMap);
+            _registeredInderfaces = new TypesMapLayer();
+            _expressionDeserializer = new ExpressionDeserializer(_registeredInderfaces);
         }
 
         public string Name { get; private set; }
@@ -206,7 +206,7 @@ namespace NiL.Hub
                 }
                 else
                 {
-                    hub = new RemoteHub(new TypesMapLayer(_commonTypesMap))
+                    hub = new RemoteHub(new TypesMapLayer(_registeredInderfaces))
                     {
                         Id = hubId,
                         Name = hubName
@@ -289,15 +289,18 @@ namespace NiL.Hub
                     if (_knownInterfaces.TryGetValue(interfaceName, out var knownInterface))
                     {
                         if (knownInterface.LocalImplementation != null)
-                            throw new InvalidOperationException("\"" + interfaceName + "\" already localy registered");
+                            throw new InvalidOperationException("\"" + interfaceName + "\" already has local registration");
                     }
                     else
                     {
-                        _knownInterfaces[interfaceName] = knownInterface = new SharedInterface<TInterface>(this, interfaceName);
+                        _knownInterfaces[interfaceName] = knownInterface = new SharedInterface<TInterface>(this, interfaceName)
+                        {
+                            LocalId = interfaceId
+                        };
                     }
 
                     knownInterface.LocalImplementation = implementation;
-                    _commonTypesMap.Add(typeof(TInterface), interfaceId);
+                    _registeredInderfaces.Add(typeof(TInterface), interfaceId);
                 }
 
                 foreach (var connections in _hubsConnctions)
@@ -343,8 +346,6 @@ namespace NiL.Hub
 
                     object implementation = GetLocalImplementation(deserialized.Parameters[0].Type);
                     var result = _expressionEvaluator.Eval(deserialized.Body, new Parameter(deserialized.Parameters[0], implementation));
-
-
 
                     void sendResult()
                     {

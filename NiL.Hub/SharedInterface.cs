@@ -7,6 +7,7 @@ namespace NiL.Hub
     {
         public readonly List<RemoteHubInterfaceLink> Hubs;
         public object LocalImplementation;
+        public uint LocalId;
 
         public string Name { get; }
 

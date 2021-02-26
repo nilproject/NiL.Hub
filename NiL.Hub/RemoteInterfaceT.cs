@@ -7,18 +7,18 @@ namespace NiL.Hub
 {
     internal class SharedInterface<IInterface> : SharedInterface, ISharedInterface<IInterface> where IInterface : class
     {
-        private readonly Hub _localHub;
+        private readonly Hub _hub;
 
-        public SharedInterface(Hub localHub, string fullName)
-            : this(localHub, fullName, new List<RemoteHubInterfaceLink>())
+        public SharedInterface(Hub hub, string fullName)
+            : this(hub, fullName, new List<RemoteHubInterfaceLink>())
         {
 
         }
 
-        public SharedInterface(Hub localHub, string fullName, List<RemoteHubInterfaceLink> remoteHubs)
+        public SharedInterface(Hub hub, string fullName, List<RemoteHubInterfaceLink> remoteHubs)
             : base(fullName, remoteHubs)
         {
-            _localHub = localHub ?? throw new ArgumentNullException(nameof(localHub));
+            _hub = hub ?? throw new ArgumentNullException(nameof(hub));
         }
 
         public Task<TResult> Call<TResult>(Expression<Func<IInterface, TResult>> expression) => callImpl<TResult>(expression);
@@ -44,7 +44,7 @@ namespace NiL.Hub
             if (!hub.Hub._typesMap.HasOwn(typeof(IInterface)))
                 hub.Hub._typesMap.Add(typeof(IInterface), hub.InterfaceId);
 
-            TaskCompletionSource<object> taskSource = _localHub.AllocTaskCompletionSource(out var taskAwaitId);
+            TaskCompletionSource<object> taskSource = _hub.AllocTaskCompletionSource(out var taskAwaitId);
             var serializedExpression = hub.Hub._expressionSerializer.Serialize(expression, Array.Empty<ParameterExpression>());
             using var connection = hub.Hub._connections.GetLockedConenction();
             connection.Value.WriteRetransmitTo(hub.Hub.Id, c => c.WriteCall(taskAwaitId, serializedExpression));
