@@ -7,6 +7,7 @@ namespace NiL.Exev
 {
     public class ExpressionDeserializer
     {
+        private readonly Dictionary<string, Type> _loadedType = new Dictionary<string, Type>();
         private readonly TypesMapLayer _types;
 
         public ExpressionDeserializer()
@@ -422,10 +423,25 @@ namespace NiL.Exev
 
                 case AdditionalTypeCodes._ArrayTypeCode: return getType(data, ref index).MakeArrayType();
                 case AdditionalTypeCodes._BoxiedTypeCode: return typeof(Nullable<>).MakeGenericType(getType(data, ref index));
-                case AdditionalTypeCodes._ExternalTypeCode:
+                case AdditionalTypeCodes._RegisteredTypeCode:
                 {
                     var exTypeCode = (uint)getInt32(data, ref index);
                     return _types.GetType(exTypeCode);
+                }
+                case AdditionalTypeCodes._UnregisteredTypeCode:
+                {
+                    var typeName = getString(data, ref index);
+                    var type = Type.GetType(typeName);
+                    if (type == null && !_loadedType.TryGetValue(typeName, out type))
+                    {
+                        type = AppDomain.CurrentDomain.GetAssemblies().Select(x => x.GetType(typeName)).FirstOrDefault(x => x != null);
+                        if (type != null)
+                            _loadedType[typeName] = type;
+                        else
+                            throw new KeyNotFoundException("Unable to resolve type \"" + typeName + "\"");
+                    }
+
+                    return type;
                 }
 
                 case TypeCode.Empty:

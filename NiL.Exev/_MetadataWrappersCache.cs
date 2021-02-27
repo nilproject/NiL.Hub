@@ -54,9 +54,9 @@ namespace NiL.Exev
             var variables = new ParameterExpression[parameters.Length];
             for (var i = 0; i < parameters.Length; i++)
             {
-                var variable = Expression.Parameter(parameters[i].ParameterType);
-                variables[variables.Length - i - 1] = variable;
-                body[i] = Expression.Assign(variable, Expression.Convert(Expression.Call(_StackPrm, _StackPopMethod), parameters[i].ParameterType));
+                var variable = Expression.Parameter(parameters[i].ParameterType, parameters[i].Name);
+                variables[i] = variable;
+                body[parameters.Length - i - 1] = Expression.Assign(variable, Expression.Convert(Expression.Call(_StackPrm, _StackPopMethod), parameters[i].ParameterType));
             }
 
             if (methodInfo.IsStatic)

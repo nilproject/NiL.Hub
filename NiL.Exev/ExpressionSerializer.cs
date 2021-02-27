@@ -382,9 +382,19 @@ namespace NiL.Exev
             {
                 if (type != typeof(object))
                 {
-                    typeId = AdditionalTypeCodes._ExternalTypeCode;
-                    result.Add((byte)typeId);
-                    addInt32(result, (int)_types.GetId(type));
+                    if (_types.TryGetId(type, out var id))
+                    {
+                        typeId = AdditionalTypeCodes._RegisteredTypeCode;
+                        result.Add((byte)typeId);
+                        addInt32(result, (int)_types.GetId(type));
+                    }
+                    else
+                    {
+                        typeId = AdditionalTypeCodes._UnregisteredTypeCode;
+                        result.Add((byte)typeId);
+                        addString(result, type.FullName);
+                    }
+
                     return;
                 }
             }
@@ -392,12 +402,12 @@ namespace NiL.Exev
             result.Add((byte)typeId);
         }
 
-        private void addString(List<byte> result, string name)
+        private void addString(List<byte> result, string value)
         {
-            addInt16(result, (short)name.Length);
-            for (var i = 0; i < name.Length; i++)
+            addInt16(result, (short)value.Length);
+            for (var i = 0; i < value.Length; i++)
             {
-                addInt16(result, (short)name[i]);
+                addInt16(result, (short)value[i]);
             }
         }
 
