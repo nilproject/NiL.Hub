@@ -10,6 +10,19 @@ namespace UnitTests.Expressions
     [TestClass]
     public sealed class ExpressionsSerializationTests
     {
+        private sealed class MyCustomType
+        {
+            public static int Sum(int a, int b)
+            {
+                return a + b;
+            }
+
+            public static T GetValue<T>(T value)
+            {
+                return value;
+            }
+        }
+
         // https://docs.microsoft.com/ru-ru/dotnet/api/system.linq.expressions.expressiontype?f1url=%3FappId%3DDev16IDEF1%26l%3DRU-RU%26k%3Dk(System.Linq.Expressions.ExpressionType);k(DevLang-csharp)%26rd%3Dtrue&view=netcore-3.1
         /*
  Add = 0, AddChecked = 1, And = 2, AndAlso = 3, ArrayLength = 4, ArrayIndex = 5, Call = 6, Coalesce = 7, Conditional = 8, Constant = 9, Convert = 10, ConvertChecked = 11,
@@ -373,14 +386,6 @@ namespace UnitTests.Expressions
                 Expression.Constant("a"),
                 Expression.Constant("b")));
 
-        private sealed class MyCustomType
-        {
-            public static int Sum(int a, int b)
-            {
-                return a + b;
-            }
-        }
-
         [TestMethod]
         public void CallingMethodOfCustomType()
         {
@@ -400,6 +405,26 @@ namespace UnitTests.Expressions
 
             Assert.IsInstanceOfType(deserialized, expression.GetType());
             Assert.AreEqual(expression.ToString(), deserialized.ToString());
+        }
+
+        [TestMethod]
+        public void GenericParametrization()
+        {
+            Expression<Func<int>> lambda = () => MyCustomType.GetValue<int>(777);
+
+            //var typeMap = new TypesMapLayer
+            //{
+            //    { typeof(MyCustomType), 333 }
+            //};
+
+            var serializer = new ExpressionSerializer();
+            var deserializer = new ExpressionDeserializer();
+
+            var serialized = serializer.Serialize(lambda);
+            var deserialized = deserializer.Deserialize(serialized);
+
+            Assert.IsInstanceOfType(deserialized, lambda.GetType());
+            Assert.AreEqual(lambda.ToString(), deserialized.ToString());
         }
 
         private static void checkSerialization(ConstantExpression expression)

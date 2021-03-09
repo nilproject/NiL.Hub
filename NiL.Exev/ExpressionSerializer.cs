@@ -150,6 +150,20 @@ namespace NiL.Exev
                 addInt16(result, (short)callExpression.Arguments.Count);
                 for (var i = 0; i < callExpression.Arguments.Count; i++)
                     serialize(callExpression.Arguments[i], parameters, result);
+
+                result.Add((byte)(callExpression.Method.IsConstructedGenericMethod ? 1 : 0));
+
+                if (callExpression.Method.IsConstructedGenericMethod)
+                {
+                    var genericArguments = callExpression.Method.GetGenericArguments();
+
+                    result.Add(checked((byte)genericArguments.Length));
+
+                    for (var i = 0; i < genericArguments.Length; i++)
+                    {
+                        addType(result, genericArguments[i]);
+                    }
+                }
             }
             else if (expression is InvocationExpression invocationExpression)
             {
@@ -386,7 +400,7 @@ namespace NiL.Exev
                     {
                         typeId = AdditionalTypeCodes._RegisteredTypeCode;
                         result.Add((byte)typeId);
-                        addInt32(result, (int)_types.GetId(type));
+                        addInt32(result, (int)id);
                     }
                     else
                     {

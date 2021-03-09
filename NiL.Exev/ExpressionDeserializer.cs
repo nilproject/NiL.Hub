@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
+using System.Reflection;
 
 namespace NiL.Exev
 {
@@ -261,7 +262,50 @@ namespace NiL.Exev
                         types[i] = argExp.Type;
                     }
 
-                    var method = declType.GetMethod(name, types);
+                    var isGeneric = data[index++] != 0;
+
+                    MethodInfo method = null;
+                    if (isGeneric)
+                    {
+                        var genericArgumentsCount = data[index++];
+                        var genericArguments = new Type[genericArgumentsCount];
+                        for (var i = 0; i < genericArgumentsCount; i++)
+                        {
+                            genericArguments[i] = getType(data, ref index);
+                        }
+
+                        var allMethods = declType.GetMethods();
+
+                        for (var i = 0; i < allMethods.Length; i++)
+                        {
+                            if (allMethods[i].IsGenericMethodDefinition && allMethods[i].GetGenericArguments().Length == genericArguments.Length)
+                            {
+                                var defMethod = allMethods[i].MakeGenericMethod(types);
+
+                                var prms = defMethod.GetParameters();
+                                var suit = true;
+                                for (var j = 0; j < prms.Length; j++)
+                                {
+                                    if (!prms[j].ParameterType.IsAssignableFrom(types[j]))
+                                    {
+                                        suit = false;
+                                        break;
+                                    }
+                                }
+
+                                if (suit)
+                                {
+                                    method = defMethod;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    else
+                    {
+                        method = declType.GetMethod(name, types);
+                    }
+
                     if (method == null)
                         throw new InvalidOperationException("Unable to deserialize method call");
 
