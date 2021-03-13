@@ -167,7 +167,7 @@ namespace NiL.Hub
 
                                 lock (_sync)
                                 {
-                                    processReceived(doAfter, RemoteHub == null ? -1 : RemoteHub.Id, (int)_inputBuffer.Length);
+                                    processReceived(doAfter, RemoteHub == null ? -1 : RemoteHub.Id, (int)_inputBuffer.Length - sizeof(ushort));
                                     _inputBuffer.SetLength(0);
 
                                     if (_outputBuffer.Length != 0)

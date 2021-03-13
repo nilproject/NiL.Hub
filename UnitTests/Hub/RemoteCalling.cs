@@ -76,7 +76,7 @@ namespace UnitTests.HubTests
         }
 
         [TestMethod]
-        [Timeout(1000)]
+        //[Timeout(1000)]
         public void RemoteCall()
         {
             using var hub1 = new Hub(777003, "hub 1");

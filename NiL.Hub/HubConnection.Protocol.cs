@@ -15,11 +15,11 @@ namespace NiL.Hub
 
             List<Exception> exceptions = null;
             var packageEnd = packageSize + (int)_inputBuffer.Position;
-            while (_inputBuffer.Position < packageSize)
+            while (_inputBuffer.Position < packageEnd)
             {
                 try
                 {
-                    processSinglePackage(doAfter, senderId, packageEnd);
+                    processSinglePackage(doAfter, senderId);
                 }
                 catch (Exception e)
                 {
@@ -38,7 +38,7 @@ namespace NiL.Hub
                 throw new AggregateException(exceptions);
         }
 
-        private void processSinglePackage(List<Action> doAfter, long senderId, int packageEnd)
+        private void processSinglePackage(List<Action> doAfter, long senderId)
         {
             var packageStart = (int)_inputBuffer.Position;
             var packageType = (PackageType)_inputBufferReader.ReadByte();

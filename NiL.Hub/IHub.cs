@@ -22,7 +22,7 @@ namespace NiL.Hub
 
         Task Connect(IPEndPoint endPoint);
 
-        Task RegisterInterface<TInterface>(TInterface implementation, int version) where TInterface : class;
+        Task RegisterInterface<TInterface>(TInterface implementation, int version = default) where TInterface : class;
         Task UnRegisterInterface<TInterface>() where TInterface : class;
 
         IEnumerable<RemoteHub> KnownHubs { get; }

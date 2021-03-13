@@ -27,9 +27,12 @@ namespace NiL.Hub
 
         private Task<TResult> callImpl<TResult>(Expression expression, int version)
         {
+            if (LocalImplementation != null && (version == 0 || LocalVersion == version))
+                return Task.FromResult((TResult)_hub._expressionEvaluator.Eval(expression));
+
             var taskSource = sendExpression(expression, version);
 
-            return taskSource.ContinueWith(x =>
+            return taskSource.Task.ContinueWith(x =>
             {
                 GC.KeepAlive(taskSource); // should live while task is alive
 
@@ -37,11 +40,8 @@ namespace NiL.Hub
             });
         }
 
-        private Task<object> sendExpression(Expression expression, int version)
+        private TaskCompletionSource<object> sendExpression(Expression expression, int version)
         {
-            if (LocalImplementation != null && (version == 0 || LocalVersion == version))
-                return Task.FromResult(_hub._expressionEvaluator.Eval(expression));
-
             var index = Environment.TickCount % Hubs.Count;
             var hub = Hubs[index];
 
@@ -70,13 +70,16 @@ namespace NiL.Hub
             connection.Value.WriteRetransmitTo(hub.Hub.Id, c => c.WriteCall(taskAwaitId, serializedExpression));
             connection.Value.FlushOutputBuffer();
 
-            return taskSource.Task;
+            return taskSource;
         }
 
         public Task Call(Expression<Action<IInterface>> expression, int version = default)
         {
+            if (LocalImplementation != null && (version == 0 || LocalVersion == version))
+                return Task.FromResult(_hub._expressionEvaluator.Eval(expression));
+
             var taskSource = sendExpression(expression, version);
-            return taskSource.ContinueWith(x =>
+            return taskSource.Task.ContinueWith(x =>
             {
                 GC.KeepAlive(taskSource);
             });
