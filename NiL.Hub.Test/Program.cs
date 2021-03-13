@@ -38,17 +38,38 @@ namespace NiL.Hub.Test
             //bench();
         }
 
+        private interface ITest
+        {
+            int GetValue();
+        }
+
+        private class ClassV1 : ITest
+        {
+            public int GetValue()
+            {
+                return 1;
+            }
+        }
+
+        private class ClassV2 : ITest
+        {
+            public int GetValue()
+            {
+                return 2;
+            }
+        }
+
         private static void hubsTest()
         {
             var hub0 = new Hub("hub 0");
             var hub0EndPoint = new IPEndPoint(IPAddress.Loopback, 4500);
             hub0.StartListening(hub0EndPoint);
 
-            var hub1 = new Hub("hub 1");
+            var hub1 = new Hub("hub 1") { PathThrough = true };
             var hub1EndPoint = new IPEndPoint(IPAddress.Loopback, 4501);
             hub1.StartListening(hub1EndPoint);
 
-            var hub2 = new Hub("hub 2");
+            var hub2 = new Hub("hub 2") { PathThrough = true };
             var hub2EndPoint = new IPEndPoint(IPAddress.Loopback, 4502);
             hub2.StartListening(hub2EndPoint);
 
@@ -57,11 +78,18 @@ namespace NiL.Hub.Test
 
             Thread.Sleep(100);
 
-            var hub3 = new Hub("hub 3");
+            var hub3 = new Hub("hub 3") { PathThrough = true };
             var hub3EndPoint = new IPEndPoint(IPAddress.Loopback, 4503);
             //hub3.Listen(hub3EndPoint);
 
             Task.WaitAll(hub3.Connect(hub1EndPoint));
+
+            Task.WaitAll(
+                hub1.RegisterInterface<ITest>(new ClassV1(), 1),
+                hub2.RegisterInterface<ITest>(new ClassV2(), 2));
+
+            var v = hub0.Get<ITest>().Call(x => x.GetValue(), 2).Result;
+            Console.WriteLine(v);
         }
 
         struct Struct

@@ -3,19 +3,16 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Linq.Expressions;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
-using System.Threading.Tasks;
-using NiL.Exev;
 
 namespace NiL.Hub
 {
     public sealed partial class HubConnection : IHubConnection
     {
         private const int _DisconnectTimeout = 10_000;
-        private const int _HandshakeTimeout = 100_000;
+        private const int _HandshakeTimeout = int.MaxValue;
 
         public RemoteHub RemoteHub { get; private set; }
         public IPEndPoint IPEndPoint { get; private set; }
@@ -173,14 +170,14 @@ namespace NiL.Hub
                                     processReceived(doAfter, RemoteHub == null ? -1 : RemoteHub.Id, (int)_inputBuffer.Length);
                                     _inputBuffer.SetLength(0);
 
-                                    if (doAfter.Count != 0)
-                                    {
-                                        for (var i = 0; i < doAfter.Count; i++)
-                                            doAfter[i].Invoke();
-                                    }
-
                                     if (_outputBuffer.Length != 0)
                                         FlushOutputBuffer();
+                                }
+
+                                if (doAfter.Count != 0)
+                                {
+                                    for (var i = 0; i < doAfter.Count; i++)
+                                        doAfter[i].Invoke();
                                 }
                             }
                         }

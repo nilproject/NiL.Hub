@@ -15,12 +15,14 @@ namespace NiL.Hub
 
         ISharedInterface<TInterface> Get<TInterface>() where TInterface : class;
 
+        bool TryGet<TInterface>(out ISharedInterface<TInterface> remoteInterface) where TInterface : class;
+
         void StartListening(IPEndPoint endPoint);
         void StopListening(IPEndPoint endPoint);
 
         Task Connect(IPEndPoint endPoint);
 
-        Task RegisterInterface<TInterface>(TInterface implementation) where TInterface : class;
+        Task RegisterInterface<TInterface>(TInterface implementation, int version) where TInterface : class;
         Task UnRegisterInterface<TInterface>() where TInterface : class;
 
         IEnumerable<RemoteHub> KnownHubs { get; }

@@ -187,10 +187,7 @@ namespace NiL.Hub
 
         public Task Connect(IPEndPoint endPoint)
         {
-            return Task.Run(() =>
-            {
-                var hubConnection = HubConnection.Connect(this, endPoint);
-            });
+            return Task.Run(() => HubConnection.Connect(this, endPoint));
         }
 
         internal RemoteHub HubIsAvailableThrough(HubConnection hubConnection, long hubId, int distance, string hubName)
@@ -277,7 +274,7 @@ namespace NiL.Hub
             }
         }
 
-        public Task RegisterInterface<TInterface>(TInterface implementation) where TInterface : class
+        public Task RegisterInterface<TInterface>(TInterface implementation, int version = default) where TInterface : class
         {
             return Task.Run(() =>
             {
@@ -295,7 +292,8 @@ namespace NiL.Hub
                     {
                         _knownInterfaces[interfaceName] = knownInterface = new SharedInterface<TInterface>(this, interfaceName)
                         {
-                            LocalId = interfaceId
+                            LocalId = interfaceId,
+                            LocalVersion = version
                         };
                     }
 
@@ -306,7 +304,7 @@ namespace NiL.Hub
                 foreach (var connections in _hubsConnctions)
                 {
                     using var connection = connections.Value[0].GetLocked();
-                    connection.Value.WriteRegisterInterface(Id, interfaceName, interfaceId);
+                    connection.Value.WriteRegisterInterface(Id, interfaceName, interfaceId, version);
                     connection.Value.FlushOutputBuffer();
                 }
             });

@@ -98,19 +98,22 @@ namespace NiL.Hub
 
                             var hubs = new long[count];
                             var intIds = new uint[count];
+                            var versions = new int[count];
                             for (var i = 0; i < @interface.Value.Hubs.Count; i++)
                             {
                                 hubs[i] = @interface.Value.Hubs[i].Hub.Id;
                                 intIds[i] = @interface.Value.Hubs[i].InterfaceId;
+                                versions[i] = @interface.Value.Hubs[i].Version;
                             }
 
                             if (localReg)
                             {
                                 hubs[count - 1] = _localHub.Id;
                                 intIds[count - 1] = @interface.Value.LocalId;
+                                versions[count - 1] = @interface.Value.LocalVersion;
                             }
 
-                            writeRegisterInterface(hubs, @interface.Key, intIds);
+                            writeRegisterInterface(hubs, @interface.Key, intIds, versions);
                         }
 
                         if (_localHub.PathThrough)
@@ -203,12 +206,15 @@ namespace NiL.Hub
                 {
                     var interfaceName = _inputBufferReader.ReadString();
                     var hubsCount = (int)_inputBufferReader.ReadByte();
+
                     var hubs = new long[hubsCount];
                     var interfaceIds = new uint[hubsCount];
+                    var versions = new int[hubsCount];
                     for (var i = 0; i < hubsCount; i++)
                     {
                         hubs[i] = _inputBufferReader.ReadInt64();
                         interfaceIds[i] = _inputBufferReader.ReadUInt32();
+                        versions[i] = _inputBufferReader.ReadInt32();
                     }
 
                     lock (_localHub._knownInterfaces)
@@ -232,11 +238,12 @@ namespace NiL.Hub
                                         {
                                             hubs[wPos] = hubId;
                                             interfaceIds[wPos] = interfaceIds[i];
+                                            versions[wPos] = versions[i];
                                         }
 
                                         wPos++;
 
-                                        tryAddInterfaceToHubOrWriteError(@interface, hubId, interfaceIds[i]);
+                                        tryAddInterfaceToHubOrWriteError(@interface, hubId, interfaceIds[i], versions[i]);
                                     }
                                 }
                             }
@@ -262,11 +269,12 @@ namespace NiL.Hub
                                 {
                                     Array.Resize(ref hubs, wPos);
                                     Array.Resize(ref interfaceIds, wPos);
+                                    Array.Resize(ref versions, wPos);
                                     doAfter.Add(() =>
                                     {
                                         forAllHubConnections(false, connection => // only those that are connected directly
                                         {
-                                            connection.writeRegisterInterface(hubs, interfaceName, interfaceIds);
+                                            connection.writeRegisterInterface(hubs, interfaceName, interfaceIds, versions);
                                             return true;
                                         });
                                     });
@@ -277,7 +285,7 @@ namespace NiL.Hub
                         {
                             @interface = new SharedInterface(interfaceName);
                             for (var i = 0; i < hubs.Length; i++)
-                                tryAddInterfaceToHubOrWriteError(@interface, hubs[i], interfaceIds[i]);
+                                tryAddInterfaceToHubOrWriteError(@interface, hubs[i], interfaceIds[i], versions[i]);
 
                             _localHub._knownInterfaces.Add(interfaceName, @interface);
 
@@ -327,18 +335,19 @@ namespace NiL.Hub
 
                         doAfter.Add(() =>
                         {
+                            RemoteHub receiverHub;
                             lock (_localHub._knownHubs)
                             {
-                                if (!_localHub._knownHubs.TryGetValue(receiverId, out var receiverHub))
+                                if (!_localHub._knownHubs.TryGetValue(receiverId, out receiverHub))
                                 {
                                     writeError(ErrorCode.UnknownHub, "Unknown hub #" + receiverId);
                                     return;
                                 }
-
-                                using var connection = receiverHub._connections.GetLockedConenction();
-                                connection.Value.writeBlob(blob);
-                                connection.Value.FlushOutputBuffer();
                             }
+
+                            using var connection = receiverHub._connections.GetLockedConenction();
+                            connection.Value.writeBlob(blob);
+                            connection.Value.FlushOutputBuffer();
                         });
                     }
 
@@ -386,7 +395,7 @@ namespace NiL.Hub
             }
         }
 
-        private void tryAddInterfaceToHubOrWriteError(SharedInterface @interface, long hubId, uint interfaceInHubId)
+        private void tryAddInterfaceToHubOrWriteError(SharedInterface @interface, long hubId, uint interfaceInHubId, int version)
         {
             RemoteHub hub;
             lock (_localHub._knownHubs)
@@ -398,7 +407,7 @@ namespace NiL.Hub
                 }
             }
 
-            @interface.Hubs.Add(new RemoteHubInterfaceLink(hub, interfaceInHubId));
+            @interface.Hubs.Add(new RemoteHubInterfaceLink(hub, interfaceInHubId, version));
             lock (hub._interfaces)
                 hub._interfaces.Add(@interface.Name);
         }
@@ -638,7 +647,7 @@ namespace NiL.Hub
             _writeSeqNumber++;
         }
 
-        internal long WriteRegisterInterface(long hubId, string interfaceName, uint interfaceId)
+        internal long WriteRegisterInterface(long hubId, string interfaceName, uint interfaceId, int version)
         {
             Debug.Assert(Monitor.IsEntered(_sync));
 
@@ -647,11 +656,12 @@ namespace NiL.Hub
             _outputBufferWritter.Write((byte)1);
             _outputBufferWritter.Write(hubId);
             _outputBufferWritter.Write(interfaceId);
+            _outputBufferWritter.Write(version);
 
             return _writeSeqNumber++;
         }
 
-        private void writeRegisterInterface(long[] hubs, string interfaceName, uint[] interfaceIds)
+        private void writeRegisterInterface(long[] hubs, string interfaceName, uint[] interfaceIds, int[] versions)
         {
             Debug.Assert(Monitor.IsEntered(_sync));
             Debug.Assert(hubs.Length == interfaceIds.Length);
@@ -671,6 +681,7 @@ namespace NiL.Hub
             {
                 _outputBufferWritter.Write(hubs[i]);
                 _outputBufferWritter.Write(interfaceIds[i]);
+                _outputBufferWritter.Write(versions[i]);
             }
 
             _writeSeqNumber++;
