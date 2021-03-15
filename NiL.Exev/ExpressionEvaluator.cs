@@ -255,6 +255,13 @@ namespace NiL.Exev
 
                 stack.Push(lambda(stack));
             }
+            else if (expression is NewExpression newExpression)
+            {
+                for (var i = 0; i < newExpression.Arguments.Count; i++)
+                    eval(newExpression.Arguments[i], stack, parameters);
+
+                stack.Push(MetadataWrappersCache.GetCtor(newExpression.Constructor)(stack));
+            }
             else throw new NotImplementedException(expression.NodeType.ToString());
         }
 

@@ -12,6 +12,7 @@ namespace NiL.Exev
 
         private static readonly Dictionary<Type, Func<int, Array>> _ArraysCtors = new Dictionary<Type, Func<int, Array>>();
         private static readonly Dictionary<MethodInfo, Func<Stack<object>, object>> _ProxiedMethods = new Dictionary<MethodInfo, Func<Stack<object>, object>>();
+        private static readonly Dictionary<ConstructorInfo, Func<Stack<object>, object>> _ProxiedCtors = new Dictionary<ConstructorInfo, Func<Stack<object>, object>>();
         private static readonly Dictionary<MemberInfo, Func<Stack<object>, object>> _ProxiedMembersSetters = new Dictionary<MemberInfo, Func<Stack<object>, object>>();
         private static readonly Dictionary<Type, Func<Stack<object>, object>> _ProxiedDelegates = new Dictionary<Type, Func<Stack<object>, object>>();
 
@@ -29,6 +30,39 @@ namespace NiL.Exev
                 _ArraysCtors.Add(type, lambda);
 
                 return lambda(length);
+            }
+        }
+
+        internal static Func<Stack<object>, object> GetCtor(ConstructorInfo constructor)
+        {
+            lock (_ProxiedCtors)
+            {
+                if (_ProxiedCtors.TryGetValue(constructor, out var ctor))
+                    return ctor;
+
+                var parameters = constructor.GetParameters();
+                var body = new Expression[parameters.Length + 1];
+                var variables = new ParameterExpression[parameters.Length];
+                for (var i = 0; i < parameters.Length; i++)
+                {
+                    var variable = Expression.Parameter(parameters[i].ParameterType, parameters[i].Name);
+                    variables[i] = variable;
+                    body[parameters.Length - i - 1] = Expression.Assign(variable, Expression.Convert(Expression.Call(_StackPrm, _StackPopMethod), parameters[i].ParameterType));
+                }
+
+                body[parameters.Length] = Expression.New(constructor, variables);
+
+                var methodBody = (Expression)Expression.Block(variables, body);
+
+                if (methodBody.Type.IsValueType)
+                {
+                    methodBody = Expression.Convert(methodBody, typeof(object));
+                }
+
+                ctor = Expression.Lambda<Func<Stack<object>, object>>(methodBody, _StackPrm).Compile();
+
+                _ProxiedCtors[constructor] = ctor;
+                return ctor;
             }
         }
 

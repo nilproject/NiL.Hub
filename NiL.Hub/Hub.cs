@@ -20,8 +20,11 @@ namespace NiL.Hub
             public Func<IList, object> ToArray;
         }
 
+        private static readonly int _awaiterCleanupInterval = TimeSpan.FromSeconds(10).Milliseconds;
+
         private uint _interfaceIdCounter;
         private volatile int _callResultAwaitId;
+        private int _lastCleanupTimestamp;
 
         private readonly Dictionary<Type, _ToArrayTools> _toArrayTools = new Dictionary<Type, _ToArrayTools>();
 
@@ -323,9 +326,47 @@ namespace NiL.Hub
             {
                 taskAwaitId = Interlocked.Increment(ref _callResultAwaitId);
                 _awaiters.Add(taskAwaitId, new WeakReference<TaskCompletionSource<object>>(taskCompletionSource));
+
+                cleanupAwaiters();
             }
 
             return taskCompletionSource;
+        }
+
+        private void cleanupAwaiters()
+        {
+            lock (_awaiters)
+            {
+                if (_awaiters.Count > 100 && Environment.TickCount - _lastCleanupTimestamp > _awaiterCleanupInterval)
+                {
+                    Task.Run(() =>
+                    {
+                        lock (_awaiters)
+                        {
+                            _lastCleanupTimestamp = Environment.TickCount;
+
+                            List<int> emptyAwaiters = null;
+
+                            foreach (var awaiter in _awaiters)
+                            {
+                                if (!awaiter.Value.TryGetTarget(out _))
+                                {
+                                    emptyAwaiters ??= new List<int>();
+                                    emptyAwaiters.Add(awaiter.Key);
+                                }
+                            }
+
+                            if (emptyAwaiters != null)
+                            {
+                                foreach (var key in emptyAwaiters)
+                                {
+                                    _awaiters.Remove(key);
+                                }
+                            }
+                        }
+                    });
+                }
+            }
         }
 
         internal Task Eval(long hubId, int awaitId, byte[] code)

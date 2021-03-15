@@ -12,7 +12,7 @@ namespace NiL.Hub
     public sealed partial class HubConnection : IHubConnection
     {
         private const int _DisconnectTimeout = 10_000;
-        private const int _HandshakeTimeout = int.MaxValue;
+        private const int _HandshakeTimeout = 10_000;
 
         public RemoteHub RemoteHub { get; private set; }
         public IPEndPoint IPEndPoint { get; private set; }
@@ -232,8 +232,8 @@ namespace NiL.Hub
                     }
                     catch (SocketException)
                     {
-                        if (_socket.Connected)
-                            throw;
+                        invalidateConnection();
+                        throw new HubDisconnectedException(RemoteHub, _localHub);
                     }
                 }
             }
