@@ -34,7 +34,10 @@ namespace NiL.Hub
 
             return taskSource.Task.ContinueWith(x =>
             {
-                GC.KeepAlive(taskSource); // should live while task is alive
+                GC.KeepAlive(taskSource); // should live while task is alive                    
+
+                if (x.IsFaulted)
+                    throw x.Exception.InnerException;
 
                 return (TResult)x.Result;
             });
@@ -66,7 +69,7 @@ namespace NiL.Hub
             var serializedExpression = hub.Hub._expressionSerializer.Serialize(expression, Array.Empty<ParameterExpression>());
 
             using var connection = hub.Hub._connections.GetLockedConenction();
-            
+
             connection.Value.WriteRetransmitTo(hub.Hub.Id, c => c.WriteCall(taskAwaitId, serializedExpression));
             connection.Value.FlushOutputBuffer();
 
@@ -79,10 +82,12 @@ namespace NiL.Hub
                 return Task.FromResult(_hub._expressionEvaluator.Eval(expression));
 
             var taskSource = sendExpression(expression, version);
-            return taskSource.Task.ContinueWith(x =>
+            var result = taskSource.Task;
+            result.ContinueWith(x =>
             {
                 GC.KeepAlive(taskSource);
             });
+            return result;
         }
     }
 }

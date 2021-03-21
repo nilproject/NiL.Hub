@@ -5,6 +5,7 @@ using System.Linq;
 using System.Linq.Expressions;
 using System.Net;
 using System.Net.Sockets;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -28,12 +29,14 @@ namespace NiL.Hub
 
         private readonly Dictionary<Type, _ToArrayTools> _toArrayTools = new Dictionary<Type, _ToArrayTools>();
 
+        internal readonly Dictionary<MemberInfo, bool> _accessCache = new Dictionary<MemberInfo, bool>();
         internal readonly TypesMapLayer _registeredInderfaces = new TypesMapLayer();
         internal readonly Dictionary<string, SharedInterface> _knownInterfaces = new Dictionary<string, SharedInterface>();
         internal readonly Dictionary<IPEndPoint, Thread> _listeners = new Dictionary<IPEndPoint, Thread>();
         internal readonly Dictionary<IPEndPoint, List<HubConnection>> _hubsConnctions = new Dictionary<IPEndPoint, List<HubConnection>>();
         internal readonly Dictionary<long, RemoteHub> _knownHubs = new Dictionary<long, RemoteHub>();
-        internal readonly ExpressionEvaluator _expressionEvaluator = new ExpressionEvaluator();
+        internal readonly ExpressionEvaluator _expressionEvaluator;
+
         internal readonly ExpressionDeserializer _expressionDeserializer;
         internal readonly Dictionary<int, WeakReference<TaskCompletionSource<object>>> _awaiters = new Dictionary<int, WeakReference<TaskCompletionSource<object>>>();
 
@@ -58,6 +61,8 @@ namespace NiL.Hub
 
             _registeredInderfaces = new TypesMapLayer();
             _expressionDeserializer = new ExpressionDeserializer(_registeredInderfaces);
+
+            _expressionEvaluator = new ExpressionEvaluator(validateAccess);
         }
 
         public string Name { get; private set; }
@@ -232,6 +237,19 @@ namespace NiL.Hub
             }
         }
 
+        private bool validateAccess(MemberInfo member)
+        {
+            lock (_accessCache)
+            {
+                if (_accessCache.TryGetValue(member, out var result))
+                    return result;
+
+                _accessCache[member] = result = !member.IsDefined(typeof(DenyRemoteCallAttribute));
+
+                return result;
+            }
+        }
+
         internal void HubIsUnavailableThrough(HubConnection hubConnection, long hubId)
         {
             lock (_knownHubs)
@@ -403,7 +421,7 @@ namespace NiL.Hub
                     var type = deserialized.ReturnType;
                     void unwrapAndSend()
                     {
-                        if (type.IsAssignableTo(typeof(Task)))
+                        if (result != null && type.IsAssignableTo(typeof(Task)))
                         {
                             var awaiterMethod = type.GetMethod("GetAwaiter");
                             var awaiter = (ICriticalNotifyCompletion)_expressionEvaluator.Eval(Expression.Call(Expression.Constant(result), awaiterMethod));

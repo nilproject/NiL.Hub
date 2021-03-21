@@ -12,28 +12,42 @@ namespace NiL.Hub.Test
 {
     class Program
     {
+        private sealed class SomeObject
+        {
+            public int Field;
+
+            public int Property { get; set; }
+        }
+
         static void Main(string[] args)
         {
-            hubsTest();
-            return;
+            //hubsTest();
+            //return;
 
-            experiments();
-            return;
+            //experiments();
+            //return;
 
-            var c = 2;
-            Expression<Func<string, string, long, long>> exp = (x, y, z) => x.Length + y.Length + z + c;
+            //var a = 2;
+            //var b = 2;
+            //var c = 2;
+            var prmA = Expression.Parameter(typeof(SomeObject), "obj");
+            var prmB = Expression.Parameter(typeof(string), "b");
+            var prmC = Expression.Parameter(typeof(long), "c");
+            var obj = new SomeObject();
+            Expression<Func<long>> exp = () => 1;
+
+            var body2 = Expression.Block(Expression.Assign(Expression.PropertyOrField(prmA, nameof(SomeObject.Property)), Expression.Constant(1)));
 
             var serializer = new ExpressionSerializer();
             var deserializer = new ExpressionDeserializer();
             var serialized = serializer.Serialize(exp);
             var deserialized = (LambdaExpression)deserializer.Deserialize(serialized);
 
-            var value = new ExpressionEvaluator().Eval(deserialized.Body,
-                new[] {
-                    new Parameter(deserialized.Parameters[0], "a"),
-                    new Parameter(deserialized.Parameters[1], "b"),
-                    new Parameter(deserialized.Parameters[2], 123L),
-                });
+            var prms = new[] {
+                    new Parameter(prmA, obj),
+                };
+            // var value = new ExpressionEvaluator().Eval(deserialized.Body, prms);
+            var value = new ExpressionEvaluator().Eval(body2, prms);
 
             //bench();
         }

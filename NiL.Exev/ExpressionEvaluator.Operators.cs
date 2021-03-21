@@ -3,7 +3,7 @@
 namespace NiL.Exev
 {
     public sealed partial class ExpressionEvaluator
-    {            
+    { 
         private static object mul_unchecked(object left, object right, Type type)
         {
             unchecked
@@ -23,7 +23,7 @@ namespace NiL.Exev
                 }
             }
         }
-                
+ 
         private static object add_unchecked(object left, object right, Type type)
         {
             unchecked
@@ -43,7 +43,7 @@ namespace NiL.Exev
                 }
             }
         }
-                
+ 
         private static object sub_unchecked(object left, object right, Type type)
         {
             unchecked
@@ -63,7 +63,7 @@ namespace NiL.Exev
                 }
             }
         }
-                
+ 
         private static object div_unchecked(object left, object right, Type type)
         {
             unchecked
@@ -83,7 +83,7 @@ namespace NiL.Exev
                 }
             }
         }
-                
+ 
         private static object mod_unchecked(object left, object right, Type type)
         {
             unchecked
@@ -103,7 +103,7 @@ namespace NiL.Exev
                 }
             }
         }
-                
+ 
         private static object and_unchecked(object left, object right, Type type)
         {
             unchecked
@@ -123,7 +123,7 @@ namespace NiL.Exev
                 }
             }
         }
-                
+ 
         private static object or_unchecked(object left, object right, Type type)
         {
             unchecked
@@ -143,7 +143,7 @@ namespace NiL.Exev
                 }
             }
         }
-                
+ 
         private static object xor_unchecked(object left, object right, Type type)
         {
             unchecked
@@ -163,7 +163,7 @@ namespace NiL.Exev
                 }
             }
         }
-                
+ 
         private static object mul_checked(object left, object right, Type type)
         {
             checked
@@ -183,7 +183,7 @@ namespace NiL.Exev
                 }
             }
         }
-                
+ 
         private static object add_checked(object left, object right, Type type)
         {
             checked
@@ -203,7 +203,7 @@ namespace NiL.Exev
                 }
             }
         }
-                
+ 
         private static object sub_checked(object left, object right, Type type)
         {
             checked
@@ -223,7 +223,7 @@ namespace NiL.Exev
                 }
             }
         }
-                
+ 
         private static object equal_unchecked(object left, object right, Type type)
         {
             unchecked
@@ -243,7 +243,7 @@ namespace NiL.Exev
                 }
             }
         }
-                
+ 
         private static object notEqual_unchecked(object left, object right, Type type)
         {
             unchecked
@@ -263,7 +263,7 @@ namespace NiL.Exev
                 }
             }
         }
-                
+ 
         private static object more_unchecked(object left, object right, Type type)
         {
             unchecked
@@ -283,7 +283,7 @@ namespace NiL.Exev
                 }
             }
         }
-                
+ 
         private static object less_unchecked(object left, object right, Type type)
         {
             unchecked
@@ -303,7 +303,7 @@ namespace NiL.Exev
                 }
             }
         }
-                
+ 
         private static object moreOrEqual_unchecked(object left, object right, Type type)
         {
             unchecked
@@ -323,7 +323,7 @@ namespace NiL.Exev
                 }
             }
         }
-                
+ 
         private static object lessOrEqual_unchecked(object left, object right, Type type)
         {
             unchecked
@@ -343,7 +343,7 @@ namespace NiL.Exev
                 }
             }
         }
-                
+ 
         private static object rightShift_unchecked(object left, object right, Type type)
         {
             unchecked
@@ -363,7 +363,7 @@ namespace NiL.Exev
                 }
             }
         }
-                
+     
         private static object leftShift_unchecked(object left, object right, Type type)
         {
             unchecked

@@ -28,7 +28,7 @@ namespace NiL.Exev
         };
 
         for (var i = 0; i < operators.Length; i++)
-        {#>            
+        {#> 
         private static object <#= char.ToLower(operators[i][0][0]) + operators[i][0].Substring(1, operators[i][0].Length - 1) + "_" + operators[i][2] #>(object left, object right, Type type)
         {
             <#= operators[i][2] #>
@@ -48,7 +48,7 @@ namespace NiL.Exev
                 }
             }
         }
-    <#}
+<#}
                 operators = new string[][]
                 {
                     
@@ -57,7 +57,7 @@ namespace NiL.Exev
                 };
 
         for (var i = 0; i < operators.Length; i++)
-        {#>            
+        {#> 
         private static object <#= char.ToLower(operators[i][0][0]) + operators[i][0].Substring(1, operators[i][0].Length - 1) + "_" + operators[i][2] #>(object left, object right, Type type)
         {
             <#= operators[i][2] #>

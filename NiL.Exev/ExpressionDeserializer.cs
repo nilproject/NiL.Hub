@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
+using NiL.Exev.FakeTypes;
 
 namespace NiL.Exev
 {
@@ -173,7 +174,31 @@ namespace NiL.Exev
                     var type = getType(data, ref index);
 
                     if (nodeType == ExpressionType.Convert)
+                    {
+                        if (type == typeof(Enum))
+                        {
+                            var interType = default(Type);
+
+                            switch (Type.GetTypeCode(value.Type))
+                            {
+                                case TypeCode.Byte: interType = typeof(UnknownByteEnum); break;
+                                case TypeCode.SByte: interType = typeof(UnknownSbyteEnum); break;
+                                case TypeCode.Int16: interType = typeof(UnknownShortEnum); break;
+                                case TypeCode.UInt16: interType = typeof(UnknownUshortEnum); break;
+                                case TypeCode.Int32: interType = typeof(UnknownIntEnum); break;
+                                case TypeCode.UInt32: interType = typeof(UnknownUintEnum); break;
+                                case TypeCode.Int64: interType = typeof(UnknownLongEnum); break;
+                                case TypeCode.UInt64: interType = typeof(UnknownUlongEnum); break;
+                            }
+
+                            value = Expression.Call(
+                                typeof(Enum).GetMethod("ToObject", new[] { typeof(Type), value.Type }),
+                                Expression.Constant(interType),
+                                value);
+                        }
+
                         return Expression.Convert(value, type);
+                    }
 
                     if (nodeType == ExpressionType.Unbox)
                         return Expression.Unbox(value, type);
@@ -203,16 +228,7 @@ namespace NiL.Exev
                 case ExpressionType.Lambda:
                 {
                     var oldParamsCount = parameters.Count;
-                    var paramsCount = getInt16(data, ref index);
-                    var lambdaParameters = new ParameterExpression[paramsCount];
-                    for (var i = 0; i < paramsCount; i++)
-                    {
-                        var type = getType(data, ref index);
-                        var name = getString(data, ref index);
-                        var parameter = Expression.Parameter(type, name);
-                        lambdaParameters[i] = parameter;
-                        parameters.Add(parameter);
-                    }
+                    var lambdaParameters = deserializeVariables(data, ref index, parameters);
 
                     var body = deserialize(data, ref index, parameters);
 
@@ -241,10 +257,33 @@ namespace NiL.Exev
 
                 case ExpressionType.Conditional:
                 {
+                    var type = getType(data, ref index);
                     var test = deserialize(data, ref index, parameters);
                     var ifTrue = deserialize(data, ref index, parameters);
                     var ifFalse = deserialize(data, ref index, parameters);
-                    return Expression.Condition(test, ifTrue, ifFalse);
+
+                    if (!type.IsAssignableFrom(ifTrue.Type))
+                        ifTrue = Expression.Convert(ifTrue, type);
+
+                    if (!type.IsAssignableFrom(ifFalse.Type))
+                        ifFalse = Expression.Convert(ifFalse, type);
+
+                    /*if (ifTrue.Type != ifFalse.Type)
+                    {
+                        if (ifFalse.Type.IsClass && ifTrue is ConstantExpression const0 && const0.Value == null)
+                            ifTrue = Expression.Convert(ifTrue, ifFalse.Type);
+
+                        if (ifTrue.Type.IsClass && ifFalse is ConstantExpression const1 && const1.Value == null)
+                            ifFalse = Expression.Convert(ifFalse, ifTrue.Type);
+
+                        var type = ifTrue.Type;
+                        while (!type.IsAssignableFrom(ifFalse.Type))
+                        {
+                            type = type.BaseType;
+                        }
+                    }*/
+
+                    return Expression.Condition(test, ifTrue, ifFalse, type);
                 }
 
                 case ExpressionType.Call:
@@ -341,8 +380,57 @@ namespace NiL.Exev
                     return Expression.NewArrayBounds(type, args);
                 }
 
+                case ExpressionType.Block:
+                {
+                    var expressionsCount = getInt32(data, ref index);
+
+                    var oldParamsCount = parameters.Count;
+                    var variables = deserializeVariables(data, ref index, parameters);
+
+                    var body = new Expression[expressionsCount];
+                    for (var i = 0; i < expressionsCount; i++)
+                    {
+                        body[i] = deserialize(data, ref index, parameters);
+                    }
+
+                    parameters.RemoveRange(oldParamsCount, parameters.Count - oldParamsCount);
+
+                    return Expression.Block(variables, body);
+                }
+
+                case ExpressionType.New:
+                {
+                    var type = getType(data, ref index);
+                    var argsCount = getInt16(data, ref index);
+                    var args = new Expression[argsCount];
+                    var types = new Type[argsCount];
+                    for (var i = 0; i < argsCount; i++)
+                    {
+                        args[i] = deserialize(data, ref index, parameters);
+                        types[i] = args[i].Type;
+                    }
+
+                    return Expression.New(type.GetConstructor(types), args);
+                }
+
                 default: throw new NotImplementedException(nodeType.ToString());
             }
+        }
+
+        private ParameterExpression[] deserializeVariables(byte[] data, ref int index, List<ParameterExpression> parameters)
+        {
+            var paramsCount = getInt16(data, ref index);
+            var lambdaParameters = new ParameterExpression[paramsCount];
+            for (var i = 0; i < paramsCount; i++)
+            {
+                var type = getType(data, ref index);
+                var name = getString(data, ref index);
+                var parameter = Expression.Parameter(type, name);
+                lambdaParameters[i] = parameter;
+                parameters.Add(parameter);
+            }
+
+            return lambdaParameters;
         }
 
         private object getValue(byte[] data, ref int index, Type type)

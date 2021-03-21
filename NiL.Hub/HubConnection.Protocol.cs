@@ -59,7 +59,8 @@ namespace NiL.Hub
 
                 case PackageType.Disconnect:
                 {
-                    State = HubConnectionState.Disconnecting;
+                    _reconnectOnFail = false;
+                    State = HubConnectionState.Disconnected;
                     doAfter.Add(invalidateConnection);
                     writeReadyForDisconnect();
                     break;

@@ -19,6 +19,11 @@ namespace UnitTests.HubTests
             int Sum(int a, int b);
             Task<int> GetDelayedValue(int value);
             IEnumerable<int> GetEnumeratedValues();
+            void SomeMethod();
+            [DenyRemoteCall]
+            void DeniedMethod();
+            [DenyRemoteCall]
+            int DeniedFunction();
         }
 
         private sealed class TestImplementation : ITestInterface
@@ -51,6 +56,22 @@ namespace UnitTests.HubTests
                 yield return 1;
                 yield return 2;
                 yield return 3;
+            }
+
+            public void SomeMethod()
+            {
+                _callback();
+            }
+
+            public void DeniedMethod()
+            {
+                _callback();
+            }
+
+            public int DeniedFunction()
+            {
+                _callback();
+                return 1;
             }
         }
 
@@ -180,6 +201,87 @@ namespace UnitTests.HubTests
             Assert.IsTrue(called, nameof(called));
 
             CollectionAssert.AreEqual(new[] { 1, 2, 3 }, value.Result as ICollection);
+        }
+
+        [TestMethod]
+        //[Timeout(1000)]
+        public void CallMethodWithVoidResult()
+        {
+            using var hub1 = new Hub(777008, "hub 1");
+
+            var endpoint2 = new IPEndPoint(IPAddress.Loopback, 4501);
+            using var hub2 = new Hub(777009, "hub 2");
+            hub2.StartListening(endpoint2);
+
+            hub1.Connect(endpoint2).Wait();
+
+            var called = false;
+
+            hub1.RegisterInterface<ITestInterface>(new TestImplementation(() => called = true)).Wait();
+
+            var value = hub2.Get<ITestInterface>().Call(x => x.SomeMethod());
+
+            value.Wait();
+
+            Assert.IsTrue(called, nameof(called));
+        }
+
+        [TestMethod]
+        public void TryToCallDeniedMethod()
+        {
+            using var hub1 = new Hub(777008, "hub 1");
+
+            var endpoint2 = new IPEndPoint(IPAddress.Loopback, 4501);
+            using var hub2 = new Hub(777009, "hub 2");
+            hub2.StartListening(endpoint2);
+
+            hub1.Connect(endpoint2).Wait();
+
+            var called = false;
+
+            hub1.RegisterInterface<ITestInterface>(new TestImplementation(() => called = true)).Wait();
+
+            var value = hub2.Get<ITestInterface>().Call(x => x.DeniedMethod());
+
+            try
+            {
+                value.Wait();
+            }
+            catch (AggregateException e)
+            {
+                Assert.IsInstanceOfType(e.InnerException, typeof(RemoteException));
+            }
+
+            Assert.IsFalse(called, nameof(called));
+        }
+
+        [TestMethod]
+        public void TryToCallDeniedMethodWithNonVoidResult()
+        {
+            using var hub1 = new Hub(777008, "hub 1");
+
+            var endpoint2 = new IPEndPoint(IPAddress.Loopback, 4501);
+            using var hub2 = new Hub(777009, "hub 2");
+            hub2.StartListening(endpoint2);
+
+            hub1.Connect(endpoint2).Wait();
+
+            var called = false;
+
+            hub1.RegisterInterface<ITestInterface>(new TestImplementation(() => called = true)).Wait();
+
+            var value = hub2.Get<ITestInterface>().Call(x => x.DeniedFunction());
+
+            try
+            {
+                value.Wait();
+            }
+            catch (AggregateException e)
+            {
+                Assert.IsInstanceOfType(e.InnerException, typeof(RemoteException));
+            }
+
+            Assert.IsFalse(called, nameof(called));
         }
     }
 }

@@ -106,17 +106,7 @@ namespace NiL.Exev
                 result.Add((byte)expression.NodeType);
 
                 var oldParametersCount = parameters.Count;
-                addInt16(result, (short)lambdaExpression.Parameters.Count);
-                for (var i = 0; i < lambdaExpression.Parameters.Count; i++)
-                {
-                    if (lambdaExpression.Parameters[i].IsByRef)
-                        throw new NotSupportedException("ByRef types are not supported");
-
-                    addType(result, lambdaExpression.Parameters[i].Type);
-                    addString(result, lambdaExpression.Parameters[i].Name);
-
-                    parameters.Add(lambdaExpression.Parameters[i]);
-                }
+                serializeVariables(parameters, result, lambdaExpression.Parameters);
 
                 serialize(lambdaExpression.Body, parameters, result);
 
@@ -178,6 +168,7 @@ namespace NiL.Exev
             {
                 result.Add((byte)expression.NodeType);
 
+                addType(result, conditionalExpression.Type);
                 serialize(conditionalExpression.Test, parameters, result);
                 serialize(conditionalExpression.IfTrue, parameters, result);
                 serialize(conditionalExpression.IfFalse, parameters, result);
@@ -200,7 +191,48 @@ namespace NiL.Exev
                 for (var i = 0; i < indexExpression.Arguments.Count; i++)
                     serialize(indexExpression.Arguments[i], parameters, result);
             }
+            else if (expression is BlockExpression blockExpression)
+            {
+                result.Add((byte)expression.NodeType);
+
+                addInt32(result, blockExpression.Expressions.Count);
+
+                var oldParametersCount = parameters.Count;
+                serializeVariables(parameters, result, blockExpression.Variables);
+
+                for (var i = 0; i < blockExpression.Expressions.Count; i++)
+                    serialize(blockExpression.Expressions[i], parameters, result);
+
+                parameters.RemoveRange(oldParametersCount, parameters.Count - oldParametersCount);
+            }
+            else if (expression is NewExpression newExpression)
+            {
+                result.Add((byte)expression.NodeType);
+
+                if (newExpression.Members != null && newExpression.Members.Count != 0)
+                    throw new NotImplementedException("newExpression.Members is not implemented");
+
+                addType(result, newExpression.Type);
+                addInt16(result, (short)newExpression.Arguments.Count);
+                for (var i = 0; i < newExpression.Arguments.Count; i++)
+                    serialize(newExpression.Arguments[i], parameters, result);
+            }
             else throw new NotSupportedException(expression.NodeType.ToString());
+        }
+
+        private void serializeVariables(List<ParameterExpression> currentVariables, List<byte> result, IList<ParameterExpression> newVariables)
+        {
+            addInt16(result, (short)newVariables.Count);
+            for (var i = 0; i < newVariables.Count; i++)
+            {
+                if (newVariables[i].IsByRef)
+                    throw new NotSupportedException("ByRef types are not supported");
+
+                addType(result, newVariables[i].Type);
+                addString(result, newVariables[i].Name);
+
+                currentVariables.Add(newVariables[i]);
+            }
         }
 
         private Expression alterMemberExpression(MemberExpression expression, List<ParameterExpression> parameters)

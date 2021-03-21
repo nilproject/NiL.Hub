@@ -1,45 +1,42 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
 
 namespace NiL.Exev
 {
-    public sealed class Parameter
-    {
-        public readonly ParameterExpression ParameterExpression;
-        public object Value;
-
-        public Parameter(ParameterExpression parameterExpression)
-        {
-            ParameterExpression = parameterExpression ?? throw new ArgumentNullException(nameof(parameterExpression));
-        }
-
-        public Parameter(ParameterExpression parameterExpression, object value)
-            : this(parameterExpression)
-        {
-            if (!parameterExpression.Type.IsAssignableFrom(value.GetType()))
-                throw new ArgumentException("Invalid value type");
-
-            Value = value;
-        }
-    }
-
     public sealed partial class ExpressionEvaluator
     {
+        private readonly Action<MemberInfo> _memberAccessValidator;
+
+        public ExpressionEvaluator()
+        {
+        }
+
+        public ExpressionEvaluator(Func<MemberInfo, bool> memberAccessValidator)
+        {
+            if (memberAccessValidator is null)
+                throw new ArgumentNullException(nameof(memberAccessValidator));
+
+            _memberAccessValidator = x =>
+            {
+                if (!memberAccessValidator(x))
+                    throw new MemberAccessException(x.ToString());
+            };
+        }
+
         public object Eval(Expression expression, params Parameter[] parameters)
         {
             if (expression == null)
                 throw new ArgumentNullException();
 
             var stack = new Stack<object>();
-            eval(expression, stack, parameters);
+            eval(expression, stack, new List<Parameter>(parameters));
 
             return stack.Pop();
         }
 
-        private void eval(Expression expression, Stack<object> stack, Parameter[] parameters)
+        private void eval(Expression expression, Stack<object> stack, List<Parameter> parameters)
         {
             if (expression is ConstantExpression constantExpression)
             {
@@ -47,9 +44,10 @@ namespace NiL.Exev
             }
             else if (expression.NodeType == ExpressionType.Index
                 || expression.NodeType == ExpressionType.ArrayIndex
-                || expression.NodeType == ExpressionType.Parameter)
+                || expression.NodeType == ExpressionType.Parameter
+                || expression.NodeType == ExpressionType.MemberAccess)
             {
-                evalAccess(expression, stack, parameters, true, out _, out _);
+                evalAccess(expression, stack, parameters);
             }
             else if (expression is MemberExpression memberExpression)
             {
@@ -60,25 +58,13 @@ namespace NiL.Exev
             {
                 var binaryExpression = expression as BinaryExpression;
 
-                evalAccess(
-                    binaryExpression.Left,
-                    stack,
-                    parameters,
-                    false,
-                    out object targetObject,
-                    out object targetProperty);
-
-                eval(binaryExpression.Right, stack, parameters);
-
-                assign(stack, parameters, binaryExpression.Left.NodeType, targetObject, targetProperty);
+                assign(stack, parameters, binaryExpression.Left, binaryExpression.Right);
             }
             else if (expression is BinaryExpression binaryExpression)
             {
-                var targetObject = default(object);
-                var targetProperty = default(object);
                 var assign = expression.NodeType >= ExpressionType.AddAssign && expression.NodeType <= ExpressionType.PostDecrementAssign;
                 if (assign)
-                    evalAccess(binaryExpression.Left, stack, parameters, true, out targetObject, out targetProperty);
+                    evalAccess(binaryExpression.Left, stack, parameters);
                 else
                     eval(binaryExpression.Left, stack, parameters);
                 eval(binaryExpression.Right, stack, parameters);
@@ -166,11 +152,17 @@ namespace NiL.Exev
                         break;
 
                     case ExpressionType.Equal:
-                        stack.Push(equal_unchecked(left, right, type));
+                        if (!type.IsPrimitive)
+                            stack.Push(Equals(left, right));
+                        else
+                            stack.Push(equal_unchecked(left, right, type));
                         break;
 
                     case ExpressionType.NotEqual:
-                        stack.Push(notEqual_unchecked(left, right, type));
+                        if (!type.IsPrimitive)
+                            stack.Push(!Equals(left, right));
+                        else
+                            stack.Push(notEqual_unchecked(left, right, type));
                         break;
 
                     case ExpressionType.RightShift:
@@ -187,7 +179,7 @@ namespace NiL.Exev
                 }
 
                 if (assign)
-                    ExpressionEvaluator.assign(stack, parameters, binaryExpression.Left.NodeType, targetObject, targetProperty);
+                    this.assign(stack, parameters, binaryExpression.Left, null);
             }
             else if (expression is UnaryExpression unaryExpression)
             {
@@ -234,6 +226,9 @@ namespace NiL.Exev
             else if (expression is MethodCallExpression callExpression)
             {
                 var method = callExpression.Method;
+
+                _memberAccessValidator?.Invoke(method);
+
                 var lambda = MetadataWrappersCache.GetMethod(method);
 
                 if (!method.IsStatic)
@@ -260,20 +255,99 @@ namespace NiL.Exev
                 for (var i = 0; i < newExpression.Arguments.Count; i++)
                     eval(newExpression.Arguments[i], stack, parameters);
 
+                _memberAccessValidator?.Invoke(newExpression.Constructor);
+
                 stack.Push(MetadataWrappersCache.GetCtor(newExpression.Constructor)(stack));
+            }
+            else if (expression is MemberInitExpression memberInit)
+            {
+                eval(memberInit.NewExpression, stack, parameters);
+
+                for (var i = 0; i < memberInit.Bindings.Count; i++)
+                {
+                    var targetObject = stack.Peek();
+                    switch (memberInit.Bindings[i])
+                    {
+                        case MemberAssignment assignment:
+                        {
+                            eval(assignment.Expression, stack, parameters);
+                            var member = assignment.Member;
+                            assignMember(stack, stack.Pop(), member);
+
+                            stack.Push(targetObject);
+                            break;
+                        }
+
+                        case MemberListBinding memberListBinding:
+                        {
+                            MethodInfo prevAddMethod = null;
+                            Func<Stack<object>, object> addMethod = null;
+                            Type[] types = new Type[1];
+
+                            for (var j = 0; j < memberListBinding.Initializers.Count; j++)
+                            {
+                                var item = memberListBinding.Initializers[j];
+                                
+                                if (prevAddMethod != item.AddMethod)
+                                {
+                                    addMethod = MetadataWrappersCache.GetMethod(item.AddMethod);
+                                    prevAddMethod = item.AddMethod;
+                                }
+
+                                for (var k = 0; k < item.Arguments.Count; k++)
+                                {
+                                    eval(item.Arguments[k], stack, parameters);
+                                }
+
+                                addMethod(stack);
+                                stack.Push(targetObject);
+                            }
+
+                            break;
+                        }
+
+                        default: throw new NotImplementedException(memberInit.Bindings[i].GetType().FullName);
+                    }
+                }
+            }
+            else if (expression is BlockExpression blockExpression)
+            {
+                var parametersCount = parameters.Count;
+                for (var i = 0; i < blockExpression.Variables.Count; i++)
+                    parameters.Add(new Parameter(blockExpression.Variables[i]));
+
+                for (var i = 0; i < blockExpression.Expressions.Count; i++)
+                {
+                    stack.Clear();
+                    eval(blockExpression.Expressions[i], stack, parameters);
+                }
+
+                parameters.RemoveRange(parametersCount, parameters.Count - parametersCount);
+            }
+            else if (expression is ConditionalExpression conditional)
+            {
+                eval(conditional.Test, stack, parameters);
+                if ((bool)stack.Pop())
+                {
+                    eval(conditional.IfTrue, stack, parameters);
+                }
+                else
+                {
+                    eval(conditional.IfFalse, stack, parameters);
+                }
             }
             else throw new NotImplementedException(expression.NodeType.ToString());
         }
 
-        private static void assign(Stack<object> stack, Parameter[] parameters, ExpressionType targetExpressionType, object targetObject, object targetProperty)
+        private void assign(Stack<object> stack, List<Parameter> parameters, Expression targetExpression, Expression sourceExpression)
         {
-            switch (targetExpressionType)
+            switch (targetExpression.NodeType)
             {
                 case ExpressionType.Parameter:
                 {
-                    for (var i = 0; i < parameters.Length; i++)
+                    for (var i = 0; i < parameters.Count; i++)
                     {
-                        if (parameters[i].ParameterExpression == targetObject)
+                        if (parameters[i].ParameterExpression == targetExpression)
                         {
                             parameters[i].Value = stack.Peek();
                             break;
@@ -283,29 +357,69 @@ namespace NiL.Exev
                     break;
                 }
 
-                case ExpressionType.Index:
+                case ExpressionType.Index when targetExpression is IndexExpression indexExpression:
                 {
-                    ((Array)targetObject).SetValue(stack.Peek(), (long[])targetProperty);
+                    computeArrayTarget(stack, parameters, indexExpression, out object array, out long[] indexes);
+
+                    if (sourceExpression != null)
+                        eval(sourceExpression, stack, parameters);
+
+                    ((Array)array).SetValue(stack.Peek(), indexes);
                     break;
                 }
 
-                default: throw new NotImplementedException("assign for " + targetExpressionType);
+                case ExpressionType.MemberAccess when targetExpression is MemberExpression memberExpression:
+                {
+                    _memberAccessValidator?.Invoke(memberExpression.Member);
+
+                    eval(memberExpression.Expression, stack, parameters);
+
+                    if (sourceExpression != null)
+                        eval(sourceExpression, stack, parameters);
+
+                    var value = stack.Pop();
+                    var member = memberExpression.Member;
+
+                    assignMember(stack, value, member);
+
+                    stack.Push(value);
+                    break;
+                }
+
+                default: throw new NotImplementedException("assign for " + targetExpression.NodeType);
             }
         }
 
-        private void evalAccess(Expression expression, Stack<object> stack, Parameter[] parameters, bool computeValue, out object targetObject, out object member)
+        private static void assignMember(Stack<object> stack, object value, MemberInfo member)
+        {
+            switch (member)
+            {
+                case PropertyInfo property:
+                {
+                    var setter = MetadataWrappersCache.GetMethod(property.SetMethod);
+                    stack.Push(value);
+                    setter(stack);
+                    break;
+                }
+
+                case FieldInfo field:
+                {
+                    var obj = stack.Pop();
+                    field.SetValue(obj, value);
+                    break;
+                }
+
+                default: throw new NotImplementedException("MemberAccess for " + member.GetType().Name);
+            }
+        }
+
+        private void evalAccess(Expression expression, Stack<object> stack, List<Parameter> parameters)
         {
             switch (expression.NodeType)
             {
                 case ExpressionType.Parameter:
                 {
-                    targetObject = expression;
-                    member = null;
-
-                    if (!computeValue)
-                        return;
-
-                    for (var i = 0; i < parameters.Length; i++)
+                    for (var i = parameters.Count; i-- > 0;)
                     {
                         if (parameters[i].ParameterExpression == expression)
                         {
@@ -319,33 +433,58 @@ namespace NiL.Exev
 
                 case ExpressionType.Index when expression is IndexExpression indexExpression:
                 {
-                    eval(indexExpression.Object, stack, parameters);
-                    var array = stack.Pop();
-
-                    var indexes = new long[indexExpression.Arguments.Count];
-                    for (var i = 0; i < indexes.Length; i++)
-                    {
-                        eval(indexExpression.Arguments[i], stack, parameters);
-                        var index = stack.Pop();
-                        if (index is int iindex)
-                            indexes[i] = iindex;
-                        else if (index is long lindex)
-                            indexes[i] = lindex;
-                        else
-                            throw new InvalidOperationException("Unknown index type (" + (index?.GetType().FullName ?? "<null>") + ")");
-                    }
-
-                    targetObject = array;
-                    member = indexes;
-
-                    if (!computeValue)
-                        return;
+                    computeArrayTarget(stack, parameters, indexExpression, out object array, out long[] indexes);
 
                     stack.Push(((Array)array).GetValue(indexes));
                     break;
                 }
 
-                default: throw new NotImplementedException("lvalue for " + expression.NodeType);
+                case ExpressionType.MemberAccess when expression is MemberExpression memberExpression:
+                {
+                    _memberAccessValidator?.Invoke(memberExpression.Member);
+
+                    eval(memberExpression.Expression, stack, parameters);
+                    switch (memberExpression.Member)
+                    {
+                        case PropertyInfo property:
+                        {
+                            var getter = MetadataWrappersCache.GetMethod(property.GetMethod);
+                            var value = getter(stack);
+                            stack.Push(value);
+                            return;
+                        }
+
+                        case FieldInfo field:
+                        {
+                            var obj = stack.Pop();
+                            var value = field.GetValue(obj);
+                            stack.Push(value);
+                            return;
+                        }
+
+                        default: throw new NotImplementedException("MemberAccess for " + memberExpression.Member.GetType().Name);
+                    }
+                }
+
+                default: throw new NotImplementedException("rvalue for " + expression.NodeType);
+            }
+        }
+
+        private void computeArrayTarget(Stack<object> stack, List<Parameter> parameters, IndexExpression indexExpression, out object array, out long[] indexes)
+        {
+            eval(indexExpression.Object, stack, parameters);
+            array = stack.Pop();
+            indexes = new long[indexExpression.Arguments.Count];
+            for (var i = 0; i < indexes.Length; i++)
+            {
+                eval(indexExpression.Arguments[i], stack, parameters);
+                var index = stack.Pop();
+                if (index is int iindex)
+                    indexes[i] = iindex;
+                else if (index is long lindex)
+                    indexes[i] = lindex;
+                else
+                    throw new InvalidOperationException("Unknown index type (" + (index?.GetType().FullName ?? "<null>") + ")");
             }
         }
     }

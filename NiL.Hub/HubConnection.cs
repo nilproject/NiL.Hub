@@ -245,6 +245,9 @@ namespace NiL.Hub
 
         public void Disconnect()
         {
+            if (State != HubConnectionState.Active)
+                return;
+
             lock (_sync)
             {
                 _reconnectOnFail = false;
