@@ -38,7 +38,9 @@ namespace NiL.Exev
         {
             if (expression is BinaryExpression binaryExpression)
             {
-                if (binaryExpression.Method != null)
+                if (binaryExpression.Method != null
+                    && expression.NodeType != ExpressionType.Power
+                    && expression.NodeType != ExpressionType.PowerAssign)
                 {
                     addMethodCall(parameters, result, new[] { binaryExpression.Left, binaryExpression.Right }, binaryExpression.Method, null);
                 }
@@ -378,6 +380,13 @@ namespace NiL.Exev
                     if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>))
                     {
                         addValue(result, value, type.GetGenericArguments()[0]);
+                        break;
+                    }
+
+                    if (value.GetType().IsPrimitive)
+                    {
+                        addType(result, value.GetType());
+                        addValue(result, value, value.GetType());
                         break;
                     }
 

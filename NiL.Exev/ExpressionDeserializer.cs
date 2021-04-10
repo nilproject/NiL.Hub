@@ -454,7 +454,7 @@ namespace NiL.Exev
 
         private object getValue(byte[] data, ref int index, Type type)
         {
-            if (type.IsArray)
+            if (type != null && type.IsArray)
             {
                 var len = getInt32(data, ref index);
                 if (len == -1)
@@ -521,14 +521,17 @@ namespace NiL.Exev
                     if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>))
                         return getValue(data, ref index, type.GetGenericArguments()[0]);
 
-                    var value = data[index++];
-                    if (value == 0) // null
-                        return null;
+                    if (type == typeof(object))
+                    {
+                        var nestedType = getType(data, ref index);
+                        return getValue(data, ref index, nestedType);
+                    }
 
                     throw new NotSupportedException(type.ToString());
                 }
 
-                case TypeCode.Empty:
+                case TypeCode.Empty: return null;
+
                 case TypeCode.DBNull: throw new NotSupportedException(typeCode.ToString());
 
                 default: throw new NotImplementedException();
@@ -591,7 +594,7 @@ namespace NiL.Exev
                         if (!_loadedType.TryGetValue(typeName, out var type))
                         {
                             type = Type.GetType(typeName);
-                            
+
                             if (type == null)
                                 type = AppDomain.CurrentDomain.GetAssemblies().Select(x => x.GetType(typeName)).FirstOrDefault(x => x != null);
 
@@ -605,7 +608,8 @@ namespace NiL.Exev
                     }
                 }
 
-                case TypeCode.Empty:
+                case TypeCode.Empty: return null;
+
                 case TypeCode.DBNull: throw new NotSupportedException(typeCode.ToString());
 
                 default: throw new NotImplementedException();
