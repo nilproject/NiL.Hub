@@ -52,7 +52,7 @@ namespace NiL.Exev
             else if (expression is MemberExpression memberExpression)
             {
                 eval(memberExpression.Expression, stack, parameters);
-                stack.Push(MetadataWrappersCache.GetMemberValue(stack, memberExpression.Member));
+                stack.Push(_MetadataWrappersCache.GetMemberValue(stack, memberExpression.Member));
             }
             else if (expression.NodeType == ExpressionType.Assign)
             {
@@ -196,6 +196,9 @@ namespace NiL.Exev
                         stack.Push(Convert.ChangeType(stack.Pop(), unaryExpression.Type));
                         break;
 
+                    case ExpressionType.TypeAs:
+                        break;
+
                     default: throw new NotImplementedException(expression.NodeType.ToString());
                 }
             }
@@ -208,7 +211,7 @@ namespace NiL.Exev
                     eval(newArrayExpression.Expressions[0], stack, parameters);
                     var length = (int)stack.Pop();
 
-                    stack.Push(MetadataWrappersCache.CreateArray(type, length));
+                    stack.Push(_MetadataWrappersCache.CreateArray(type, length));
                 }
                 else
                 {
@@ -229,7 +232,7 @@ namespace NiL.Exev
 
                 _memberAccessValidator?.Invoke(method);
 
-                var lambda = MetadataWrappersCache.GetMethod(method);
+                var lambda = _MetadataWrappersCache.GetMethod(method);
 
                 if (!method.IsStatic)
                     eval(callExpression.Object, stack, parameters);
@@ -243,7 +246,7 @@ namespace NiL.Exev
             {
                 eval(invocationExpression.Expression, stack, parameters);
                 var srcLambda = (Delegate)stack.Peek();
-                var lambda = MetadataWrappersCache.WrapLambda(srcLambda);
+                var lambda = _MetadataWrappersCache.WrapLambda(srcLambda);
 
                 for (var i = 0; i < invocationExpression.Arguments.Count; i++)
                     eval(invocationExpression.Arguments[i], stack, parameters);
@@ -257,7 +260,7 @@ namespace NiL.Exev
 
                 _memberAccessValidator?.Invoke(newExpression.Constructor);
 
-                stack.Push(MetadataWrappersCache.GetCtor(newExpression.Constructor)(stack));
+                stack.Push(_MetadataWrappersCache.GetCtor(newExpression.Constructor)(stack));
             }
             else if (expression is MemberInitExpression memberInit)
             {
@@ -287,10 +290,10 @@ namespace NiL.Exev
                             for (var j = 0; j < memberListBinding.Initializers.Count; j++)
                             {
                                 var item = memberListBinding.Initializers[j];
-                                
+
                                 if (prevAddMethod != item.AddMethod)
                                 {
-                                    addMethod = MetadataWrappersCache.GetMethod(item.AddMethod);
+                                    addMethod = _MetadataWrappersCache.GetMethod(item.AddMethod);
                                     prevAddMethod = item.AddMethod;
                                 }
 
@@ -335,6 +338,11 @@ namespace NiL.Exev
                 {
                     eval(conditional.IfFalse, stack, parameters);
                 }
+            }
+            else if (expression is LambdaExpression lambdaExpression)
+            {
+                var lambda = _DelegateWrapperCache.GetLambda(this, parameters, lambdaExpression);
+                stack.Push(lambda);
             }
             else throw new NotImplementedException(expression.NodeType.ToString());
         }
@@ -396,7 +404,7 @@ namespace NiL.Exev
             {
                 case PropertyInfo property:
                 {
-                    var setter = MetadataWrappersCache.GetMethod(property.SetMethod);
+                    var setter = _MetadataWrappersCache.GetMethod(property.SetMethod);
                     stack.Push(value);
                     setter(stack);
                     break;
@@ -443,12 +451,16 @@ namespace NiL.Exev
                 {
                     _memberAccessValidator?.Invoke(memberExpression.Member);
 
-                    eval(memberExpression.Expression, stack, parameters);
+                    var staticMember = memberExpression.Expression == null;
+
+                    if (!staticMember)
+                        eval(memberExpression.Expression, stack, parameters);
+
                     switch (memberExpression.Member)
                     {
                         case PropertyInfo property:
                         {
-                            var getter = MetadataWrappersCache.GetMethod(property.GetMethod);
+                            var getter = _MetadataWrappersCache.GetMethod(property.GetMethod);
                             var value = getter(stack);
                             stack.Push(value);
                             return;
@@ -456,7 +468,7 @@ namespace NiL.Exev
 
                         case FieldInfo field:
                         {
-                            var obj = stack.Pop();
+                            var obj = staticMember ? null : stack.Pop();
                             var value = field.GetValue(obj);
                             stack.Push(value);
                             return;

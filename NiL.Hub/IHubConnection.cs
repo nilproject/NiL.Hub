@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Net;
 
 namespace NiL.Hub
@@ -11,5 +12,8 @@ namespace NiL.Hub
         HubConnectionState State { get; }
 
         void Disconnect();
+
+        event EventHandler<ConnectionEventArgs> Disconnected;
+        event EventHandler<ConnectionEventArgs> Connected;
     }
 }

@@ -182,7 +182,7 @@ namespace NiL.Hub
                         var tcpClient = listener.AcceptTcpClient();
                         if (tcpClient != null)
                         {
-                            HubConnection.AcceptConnected(this, tcpClient);
+                            HubConnection.AcceptConnected(this, tcpClient, false);
                         }
                     }
                 }
@@ -193,9 +193,9 @@ namespace NiL.Hub
             }
         }
 
-        public Task Connect(IPEndPoint endPoint)
+        public Task<IHubConnection> Connect(IPEndPoint endPoint, bool autoReconnect = true)
         {
-            return Task.Run(() => HubConnection.Connect(this, endPoint));
+            return Task.Run(() => HubConnection.Connect(this, endPoint, autoReconnect) as IHubConnection);
         }
 
         internal RemoteHub HubIsAvailableThrough(HubConnection hubConnection, long hubId, int distance, string hubName)
@@ -393,132 +393,143 @@ namespace NiL.Hub
 
             var task = Task.Run(() =>
             {
-                var hub = getRemoteHub(hubId);
-
                 try
                 {
-                    var deserialized = (LambdaExpression)_expressionDeserializer.Deserialize(code, Array.Empty<ParameterExpression>());
-                    if (deserialized.Parameters.Count != 1)
-                        throw new ArgumentException("Number of parameters is not equal to 1");
-
-                    object implementation = GetLocalImplementation(deserialized.Parameters[0].Type);
-                    var result = _expressionEvaluator.Eval(deserialized.Body, new Parameter(deserialized.Parameters[0], implementation));
-
-                    void sendResult()
-                    {
-                        using var connection = hub._connections.GetLockedConenction();
-
-                        connection.Value.WriteRetransmitTo(hubId, c =>
-                            {
-                                c.WriteResult(awaitId, hub._expressionSerializer.Serialize(Expression.Constant(result)));
-                            });
-
-                        connection.Value.FlushOutputBuffer();
-
-                        resultTask.SetResult(result);
-                    }
-
-                    var type = deserialized.ReturnType;
-                    void unwrapAndSend()
-                    {
-                        if (result != null && type.IsAssignableTo(typeof(Task)))
-                        {
-                            var awaiterMethod = type.GetMethod("GetAwaiter");
-                            var awaiter = (ICriticalNotifyCompletion)_expressionEvaluator.Eval(Expression.Call(Expression.Constant(result), awaiterMethod));
-                            if (awaiterMethod.ReturnType.IsGenericType)
-                            {
-                                var getResult = awaiter.GetType().GetMethod(nameof(TaskAwaiter.GetResult));
-                                var expr = Expression.Call(Expression.Constant(awaiter), getResult);
-                                awaiter.UnsafeOnCompleted(() =>
-                                {
-                                    type = getResult.ReturnType;
-                                    result = _expressionEvaluator.Eval(expr);
-                                    unwrapAndSend();
-                                });
-                            }
-                            else
-                            {
-                                awaiter.UnsafeOnCompleted(() =>
-                                {
-                                    result = null;
-                                    sendResult();
-                                });
-                            }
-                        }
-                        else
-                        {
-                            if (result is IEnumerable enumerable)
-                            {
-                                if (!result.GetType().IsArray)
-                                {
-                                    var interfaces = result.GetType().GetInterfaces();
-                                    Type @interface = null;
-                                    for (var i = 0; i < interfaces.Length; i++)
-                                    {
-                                        if ((interfaces[i].FullName.StartsWith(typeof(IEnumerable).FullName) || interfaces[i].FullName.StartsWith(typeof(IEnumerable<>).FullName))
-                                            && (@interface == null || interfaces[i].FullName.Length > @interface.FullName.Length))
-                                        {
-                                            @interface = interfaces[i];
-                                        }
-                                    }
-
-                                    var itemType = @interface.IsConstructedGenericType ? @interface.GetGenericArguments()[0] : typeof(object);
-
-                                    if (itemType == typeof(object))
-                                    {
-                                        var list = new List<object>();
-                                        foreach (var item in enumerable)
-                                        {
-                                            list.Add(item);
-                                        }
-
-                                        result = list.ToArray();
-                                    }
-                                    else
-                                    {
-                                        var listType = typeof(List<>).MakeGenericType(itemType);
-
-                                        if (!_toArrayTools.TryGetValue(itemType, out var arrayTools))
-                                        {
-                                            var listPrm = Expression.Parameter(typeof(IList));
-                                            arrayTools = new _ToArrayTools
-                                            {
-                                                NewList = Expression.Lambda<Func<IList>>(Expression.New(listType)).Compile(),
-                                                ToArray = Expression.Lambda<Func<IList, object>>(
-                                                    Expression.Call(Expression.Convert(listPrm, listType), listType.GetMethod("ToArray")), listPrm)
-                                                .Compile(),
-                                            };
-                                        }
-
-                                        var list = arrayTools.NewList();
-                                        foreach (var item in enumerable)
-                                        {
-                                            list.Add(item);
-                                        }
-
-                                        result = arrayTools.ToArray(list);
-                                    }
-                                }
-                            }
-
-                            sendResult();
-                        }
-                    }
-
-                    unwrapAndSend();
+                    doEval(hubId, awaitId, code, resultTask);
                 }
-                catch (Exception e)
-                {
-                    Console.Error.WriteLine(e.Message);
-                    resultTask.SetException(e);
-
-                    using var connection = hub._connections.GetLockedConenction();
-                    connection.Value.WriteRetransmitTo(hubId, c => c.WriteException(awaitId, e));
-                    connection.Value.FlushOutputBuffer();
-                }
+                catch
+                { }
             });
 
             return resultTask.Task;
+        }
+
+        private void doEval(long hubId, int awaitId, byte[] code, TaskCompletionSource<object> resultTask)
+        {
+            var hub = getRemoteHub(hubId);
+
+            try
+            {
+                var deserialized = (LambdaExpression)_expressionDeserializer.Deserialize(code, Array.Empty<ParameterExpression>());
+                if (deserialized.Parameters.Count != 1)
+                    throw new ArgumentException("Number of parameters is not equal to 1");
+
+                object implementation = GetLocalImplementation(deserialized.Parameters[0].Type);
+                var result = _expressionEvaluator.Eval(deserialized.Body, new Parameter(deserialized.Parameters[0], implementation));
+
+                void sendResult()
+                {
+                    using var connection = hub._connections.GetLockedConenction();
+
+                    connection.Value.WriteRetransmitTo(hubId, c =>
+                    {
+                        c.WriteResult(awaitId, hub._expressionSerializer.Serialize(Expression.Constant(result)));
+                    });
+
+                    connection.Value.FlushOutputBuffer();
+
+                    resultTask.SetResult(result);
+                }
+
+                var type = deserialized.ReturnType;
+                void unwrapAndSend()
+                {
+                    if (result != null && type.IsAssignableTo(typeof(Task)))
+                    {
+                        var awaiterMethod = type.GetMethod("GetAwaiter");
+                        var awaiter = (ICriticalNotifyCompletion)_expressionEvaluator.Eval(Expression.Call(Expression.Constant(result), awaiterMethod));
+                        if (awaiterMethod.ReturnType.IsGenericType)
+                        {
+                            var getResult = awaiter.GetType().GetMethod(nameof(TaskAwaiter.GetResult));
+                            var expr = Expression.Call(Expression.Constant(awaiter), getResult);
+                            awaiter.UnsafeOnCompleted(() =>
+                            {
+                                type = getResult.ReturnType;
+                                result = _expressionEvaluator.Eval(expr);
+                                unwrapAndSend();
+                            });
+                        }
+                        else
+                        {
+                            awaiter.UnsafeOnCompleted(() =>
+                            {
+                                result = null;
+                                sendResult();
+                            });
+                        }
+                    }
+                    else
+                    {
+                        if (!(result is string) && (result is IEnumerable enumerable))
+                        {
+                            if (!result.GetType().IsArray)
+                            {
+                                var interfaces = result.GetType().GetInterfaces();
+                                Type @interface = null;
+                                for (var i = 0; i < interfaces.Length; i++)
+                                {
+                                    if ((interfaces[i].FullName.StartsWith(typeof(IEnumerable).FullName) || interfaces[i].FullName.StartsWith(typeof(IEnumerable<>).FullName))
+                                        && (@interface == null || interfaces[i].FullName.Length > @interface.FullName.Length))
+                                    {
+                                        @interface = interfaces[i];
+                                    }
+                                }
+
+                                var itemType = @interface.IsConstructedGenericType ? @interface.GetGenericArguments()[0] : typeof(object);
+
+                                if (itemType == typeof(object))
+                                {
+                                    var list = new List<object>();
+                                    foreach (var item in enumerable)
+                                    {
+                                        list.Add(item);
+                                    }
+
+                                    result = list.ToArray();
+                                }
+                                else
+                                {
+                                    var listType = typeof(List<>).MakeGenericType(itemType);
+
+                                    if (!_toArrayTools.TryGetValue(itemType, out var arrayTools))
+                                    {
+                                        var listPrm = Expression.Parameter(typeof(IList));
+                                        arrayTools = new _ToArrayTools
+                                        {
+                                            NewList = Expression.Lambda<Func<IList>>(Expression.New(listType)).Compile(),
+                                            ToArray = Expression.Lambda<Func<IList, object>>(
+                                                Expression.Call(Expression.Convert(listPrm, listType), listType.GetMethod("ToArray")), listPrm)
+                                            .Compile(),
+                                        };
+                                    }
+
+                                    var list = arrayTools.NewList();
+                                    foreach (var item in enumerable)
+                                    {
+                                        list.Add(item);
+                                    }
+
+                                    result = arrayTools.ToArray(list);
+                                }
+                            }
+                        }
+
+                        sendResult();
+                    }
+                }
+
+                unwrapAndSend();
+            }
+            catch (Exception e)
+            {
+                using var connection = hub._connections.GetLockedConenction();
+                connection.Value.WriteRetransmitTo(hubId, c => c.WriteException(awaitId, e));
+                connection.Value.FlushOutputBuffer();
+
+                resultTask.SetException(e);
+
+                Console.Error.WriteLine(e.Message);
+            }
         }
 
         internal Task SetResult(int awaitId, byte[] code)

@@ -1,11 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
 
 namespace NiL.Exev
 {
-    internal static class MetadataWrappersCache
+    internal static class _MetadataWrappersCache
     {
         private static readonly MethodInfo _StackPopMethod = typeof(Stack<object>).GetMethod(nameof(Stack<object>.Pop));
         private static readonly ParameterExpression _StackPrm = Expression.Parameter(typeof(Stack<object>), "stack");
@@ -15,6 +16,19 @@ namespace NiL.Exev
         private static readonly Dictionary<ConstructorInfo, Func<Stack<object>, object>> _ProxiedCtors = new Dictionary<ConstructorInfo, Func<Stack<object>, object>>();
         private static readonly Dictionary<MemberInfo, Func<Stack<object>, object>> _ProxiedMembersSetters = new Dictionary<MemberInfo, Func<Stack<object>, object>>();
         private static readonly Dictionary<Type, Func<Stack<object>, object>> _ProxiedDelegates = new Dictionary<Type, Func<Stack<object>, object>>();
+        private static readonly Dictionary<Type, MethodInfo[]> _TypeMethods = new Dictionary<Type, MethodInfo[]>();
+        private static readonly Dictionary<(Type, string), MemberInfo> _TypeMembers = new Dictionary<(Type, string), MemberInfo>();
+
+        internal static MethodInfo[] GetMethods(Type type)
+        {
+            if (_TypeMethods.TryGetValue(type, out var result))
+                return result;
+
+            _TypeMethods[type] = result = type.GetMethods();
+            Array.Sort(result, (x, y) => string.CompareOrdinal(x.Name, y.Name));
+
+            return result;
+        }
 
         internal static Array CreateArray(Type type, int length)
         {
@@ -147,6 +161,18 @@ namespace NiL.Exev
             _ProxiedMembersSetters[member] = lambda;
 
             return lambda(stack.Pop());
+        }
+
+        internal static MemberInfo GetMember(Type type, string memberName)
+        {
+            if (_TypeMembers.TryGetValue((type, memberName), out var memberInfo))
+                return memberInfo;
+
+            memberInfo = type.GetMember(memberName).SingleOrDefault();
+            if (memberInfo != null)
+                _TypeMembers[(type, memberName)] = memberInfo;
+
+            return memberInfo;
         }
     }
 }

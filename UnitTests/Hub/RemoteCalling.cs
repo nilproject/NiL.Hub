@@ -24,6 +24,7 @@ namespace UnitTests.HubTests
             void DeniedMethod();
             [DenyRemoteCall]
             int DeniedFunction();
+            object MethodWithCallback(Func<int, string, object> callback);
         }
 
         private sealed class TestImplementation : ITestInterface
@@ -73,6 +74,11 @@ namespace UnitTests.HubTests
                 _callback();
                 return 1;
             }
+
+            public object MethodWithCallback(Func<int, string, object> callback)
+            {
+                return callback(1, "str");
+            }
         }
 
         [TestMethod]
@@ -97,7 +103,7 @@ namespace UnitTests.HubTests
         }
 
         [TestMethod]
-        //[Timeout(1000)]
+        [Timeout(1000)]
         public void RemoteCall()
         {
             using var hub1 = new Hub(777003, "hub 1");
@@ -204,7 +210,7 @@ namespace UnitTests.HubTests
         }
 
         [TestMethod]
-        //[Timeout(1000)]
+        [Timeout(1000)]
         public void CallMethodWithVoidResult()
         {
             using var hub1 = new Hub(777008, "hub 1");
@@ -282,6 +288,26 @@ namespace UnitTests.HubTests
             }
 
             Assert.IsFalse(called, nameof(called));
+        }
+
+        [TestMethod]
+        public void SendLambda()
+        {
+            using var hub1 = new Hub(777008, "hub 1");
+
+            var endpoint2 = new IPEndPoint(IPAddress.Loopback, 4501);
+            using var hub2 = new Hub(777009, "hub 2");
+            hub2.StartListening(endpoint2);
+
+            hub1.Connect(endpoint2).Wait();
+
+            hub1.RegisterInterface<ITestInterface>(new TestImplementation()).Wait();
+
+            var value = hub2.Get<ITestInterface>().Call(x => x.MethodWithCallback((y, s) => s + y));
+
+            value.Wait();
+
+            Assert.AreEqual("str1", value.Result);
         }
     }
 }

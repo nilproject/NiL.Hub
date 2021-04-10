@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq.Expressions;
 
 namespace NiL.Exev
@@ -37,9 +38,16 @@ namespace NiL.Exev
         {
             if (expression is BinaryExpression binaryExpression)
             {
-                result.Add((byte)expression.NodeType);
-                serialize(binaryExpression.Left, parameters, result);
-                serialize(binaryExpression.Right, parameters, result);
+                if (binaryExpression.Method != null)
+                {
+                    addMethodCall(parameters, result, new[] { binaryExpression.Left, binaryExpression.Right }, binaryExpression.Method, null);
+                }
+                else
+                {
+                    result.Add((byte)expression.NodeType);
+                    serialize(binaryExpression.Left, parameters, result);
+                    serialize(binaryExpression.Right, parameters, result);
+                }
             }
             else if (expression is UnaryExpression unaryExpression)
             {
@@ -49,6 +57,7 @@ namespace NiL.Exev
                 switch (expression.NodeType)
                 {
                     case ExpressionType.Unbox:
+                    case ExpressionType.TypeAs:
                     case ExpressionType.Convert:
                     case ExpressionType.ConvertChecked:
                         addType(result, unaryExpression.Type);
@@ -90,7 +99,7 @@ namespace NiL.Exev
             {
                 result.Add((byte)expression.NodeType);
 
-                for (var i = 0; i < parameters.Count; i++)
+                for (var i = parameters.Count; i-- > 0;)
                 {
                     if (parameters[i] == parameter)
                     {
@@ -117,7 +126,7 @@ namespace NiL.Exev
                 result.Add((byte)expression.NodeType);
 
                 var value = constantExpression.Value;
-                var type = value?.GetType() ?? typeof(object);
+                var type = constantExpression.Type;
 
                 if (type != constantExpression.Type && value != null) // boxied
                     type = typeof(Nullable<>).MakeGenericType(type);
@@ -127,33 +136,11 @@ namespace NiL.Exev
             }
             else if (expression is MethodCallExpression callExpression)
             {
-                result.Add((byte)expression.NodeType);
+                var arguments = callExpression.Arguments;
+                var method = callExpression.Method;
+                var target = callExpression.Object;
 
-                if (callExpression.Object == null)
-                    serialize(Expression.Constant(null, typeof(object)), parameters, result);
-                else
-                    serialize(callExpression.Object, parameters, result);
-
-                addType(result, callExpression.Method.DeclaringType);
-                addString(result, callExpression.Method.Name);
-
-                addInt16(result, (short)callExpression.Arguments.Count);
-                for (var i = 0; i < callExpression.Arguments.Count; i++)
-                    serialize(callExpression.Arguments[i], parameters, result);
-
-                result.Add((byte)(callExpression.Method.IsConstructedGenericMethod ? 1 : 0));
-
-                if (callExpression.Method.IsConstructedGenericMethod)
-                {
-                    var genericArguments = callExpression.Method.GetGenericArguments();
-
-                    result.Add(checked((byte)genericArguments.Length));
-
-                    for (var i = 0; i < genericArguments.Length; i++)
-                    {
-                        addType(result, genericArguments[i]);
-                    }
-                }
+                addMethodCall(parameters, result, arguments, method, target);
             }
             else if (expression is InvocationExpression invocationExpression)
             {
@@ -220,6 +207,37 @@ namespace NiL.Exev
             else throw new NotSupportedException(expression.NodeType.ToString());
         }
 
+        private void addMethodCall(List<ParameterExpression> parameters, List<byte> result, IList<Expression> arguments, System.Reflection.MethodInfo method, Expression target)
+        {
+            result.Add((byte)ExpressionType.Call);
+
+            if (target == null)
+                serialize(Expression.Constant(null, typeof(object)), parameters, result);
+            else
+                serialize(target, parameters, result);
+
+            addType(result, method.DeclaringType);
+            addString(result, method.Name);
+
+            addInt16(result, (short)arguments.Count);
+            for (var i = 0; i < arguments.Count; i++)
+                serialize(arguments[i], parameters, result);
+
+            result.Add((byte)(method.IsConstructedGenericMethod ? 1 : 0));
+
+            if (method.IsConstructedGenericMethod)
+            {
+                var genericArguments = method.GetGenericArguments();
+
+                result.Add(checked((byte)genericArguments.Length));
+
+                for (var i = 0; i < genericArguments.Length; i++)
+                {
+                    addType(result, genericArguments[i]);
+                }
+            }
+        }
+
         private void serializeVariables(List<ParameterExpression> currentVariables, List<byte> result, IList<ParameterExpression> newVariables)
         {
             addInt16(result, (short)newVariables.Count);
@@ -237,17 +255,19 @@ namespace NiL.Exev
 
         private Expression alterMemberExpression(MemberExpression expression, List<ParameterExpression> parameters)
         {
-            var src = expression.Expression;
-            if (src is MemberExpression memberExpressionSrc)
+            var source = expression.Expression;
+            if (source is MemberExpression memberExpressionSrc)
             {
-                src = alterMemberExpression(memberExpressionSrc, parameters);
-                if (src != null)
-                    expression = Expression.MakeMemberAccess(src, expression.Member);
+                source = alterMemberExpression(memberExpressionSrc, parameters);
+                if (source != null)
+                    expression = Expression.MakeMemberAccess(source, expression.Member);
                 else
-                    src = expression.Expression;
+                    source = expression.Expression;
             }
 
-            if (src.NodeType == ExpressionType.Constant)
+            if (source == null) // static field
+                return Expression.Constant(_expressionEvaluator.Eval(expression));
+            else if (source.NodeType == ExpressionType.Constant)
                 return Expression.Constant(_expressionEvaluator.Eval(expression));
 
             return null;
@@ -259,7 +279,7 @@ namespace NiL.Exev
             {
                 var itemType = type.GetElementType();
                 var array = (Array)value;
-                var len = array.Length;
+                var len = array == null ? -1 : array.Length;
 
                 addInt32(result, len);
 
@@ -378,24 +398,12 @@ namespace NiL.Exev
             result.Add((byte)(value >> 8));
         }
 
-        private short getInt16(byte[] data, ref int index)
-        {
-            return (short)(data[index++] | (data[index++] << 8));
-        }
-
         private static void addInt32(List<byte> result, int value)
         {
             result.Add((byte)value);
             result.Add((byte)(value >> 8));
             result.Add((byte)(value >> 16));
             result.Add((byte)(value >> 24));
-        }
-
-        private int getInt32(byte[] data, ref int index)
-        {
-            var lo = (int)(ushort)getInt16(data, ref index);
-            var hi = (ushort)getInt16(data, ref index);
-            return lo | (hi << 16);
         }
 
         private static void addInt64(List<byte> result, long value)
@@ -455,16 +463,6 @@ namespace NiL.Exev
             {
                 addInt16(result, (short)value[i]);
             }
-        }
-
-        private unsafe string getString(byte[] data, ref int index)
-        {
-            var len = getInt16(data, ref index);
-            var buffer = stackalloc char[len];
-            for (var i = 0; i < len; i++)
-                buffer[i] = (char)getInt16(data, ref index);
-
-            return new string(buffer, 0, len);
         }
     }
 }

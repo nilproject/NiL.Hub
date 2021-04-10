@@ -27,6 +27,11 @@ namespace NiL.Hub.Test
             //experiments();
             //return;
 
+            var f = new Func<int, int, int>((x, y) => x + y);
+            //var invokeMethod = f.Invoke();
+
+            return;
+
             //var a = 2;
             //var b = 2;
             //var c = 2;

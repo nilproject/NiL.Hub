@@ -168,6 +168,7 @@ namespace NiL.Exev
 
                 case ExpressionType.Unbox:
                 case ExpressionType.Convert:
+                case ExpressionType.TypeAs:
                 case ExpressionType.ConvertChecked:
                 {
                     var value = deserialize(data, ref index, parameters);
@@ -200,6 +201,9 @@ namespace NiL.Exev
                         return Expression.Convert(value, type);
                     }
 
+                    if (nodeType == ExpressionType.TypeAs)
+                        return Expression.TypeAs(value, type);
+
                     if (nodeType == ExpressionType.Unbox)
                         return Expression.Unbox(value, type);
 
@@ -213,7 +217,7 @@ namespace NiL.Exev
                     var type = getType(data, ref index);
 
                     var memberName = getString(data, ref index);
-                    var member = type.GetMember(memberName).SingleOrDefault();
+                    var member = _MetadataWrappersCache.GetMember(type, memberName);
 
                     return Expression.MakeMemberAccess(expr, member);
                 }
@@ -308,18 +312,33 @@ namespace NiL.Exev
                     {
                         var genericArgumentsCount = data[index++];
                         var genericArguments = new Type[genericArgumentsCount];
-                        for (var i = 0; i < genericArgumentsCount; i++)
+                        var i = 0;
+                        for (; i < genericArgumentsCount; i++)
                         {
                             genericArguments[i] = getType(data, ref index);
                         }
 
-                        var allMethods = declType.GetMethods();
+                        var allMethods = _MetadataWrappersCache.GetMethods(declType);
 
-                        for (var i = 0; i < allMethods.Length; i++)
+                        i = 0;
+                        for (; i < allMethods.Length; i++)
                         {
-                            if (allMethods[i].IsGenericMethodDefinition && allMethods[i].GetGenericArguments().Length == genericArguments.Length)
+                            if (allMethods[i].Name == name)
+                                break;
+                        }
+
+                        for (; i < allMethods.Length; i++)
+                        {
+                            var methodInfo = allMethods[i];
+
+                            if (methodInfo.Name != name)
+                                break;
+
+                            if (methodInfo.IsGenericMethodDefinition
+                                && methodInfo.GetParameters().Length == types.Length
+                                && methodInfo.GetGenericArguments().Length == genericArguments.Length)
                             {
-                                var defMethod = allMethods[i].MakeGenericMethod(types);
+                                var defMethod = methodInfo.MakeGenericMethod(genericArguments);
 
                                 var prms = defMethod.GetParameters();
                                 var suit = true;
@@ -438,8 +457,12 @@ namespace NiL.Exev
             if (type.IsArray)
             {
                 var len = getInt32(data, ref index);
-                var array = MetadataWrappersCache.CreateArray(type, len);
+                if (len == -1)
+                    return null;
+
+                var array = _MetadataWrappersCache.CreateArray(type, len);
                 var elementType = type.GetElementType();
+
                 for (var i = 0; i < len; i++)
                     array.SetValue(getValue(data, ref index, elementType), i);
 
@@ -563,17 +586,23 @@ namespace NiL.Exev
                 case AdditionalTypeCodes._UnregisteredTypeCode:
                 {
                     var typeName = getString(data, ref index);
-                    var type = Type.GetType(typeName);
-                    if (type == null && !_loadedType.TryGetValue(typeName, out type))
+                    lock (_loadedType)
                     {
-                        type = AppDomain.CurrentDomain.GetAssemblies().Select(x => x.GetType(typeName)).FirstOrDefault(x => x != null);
-                        if (type != null)
-                            _loadedType[typeName] = type;
-                        else
-                            throw new KeyNotFoundException("Unable to resolve type \"" + typeName + "\"");
-                    }
+                        if (!_loadedType.TryGetValue(typeName, out var type))
+                        {
+                            type = Type.GetType(typeName);
+                            
+                            if (type == null)
+                                type = AppDomain.CurrentDomain.GetAssemblies().Select(x => x.GetType(typeName)).FirstOrDefault(x => x != null);
 
-                    return type;
+                            if (type != null)
+                                _loadedType[typeName] = type;
+                            else
+                                throw new KeyNotFoundException("Unable to resolve type \"" + typeName + "\"");
+                        }
+
+                        return type;
+                    }
                 }
 
                 case TypeCode.Empty:

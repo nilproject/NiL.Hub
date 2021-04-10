@@ -6,10 +6,11 @@ using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace NiL.Hub
 {
-    public sealed partial class HubConnection : IHubConnection
+    public sealed partial class HubConnection : IHubConnection, IDisposable
     {
         private const int _DisconnectTimeout = 10_000;
         private const int _HandshakeTimeout = 10_000;
@@ -23,18 +24,21 @@ namespace NiL.Hub
         internal readonly HashSet<long> _allHubs = new HashSet<long>();
 
         private readonly object _sync = new object();
-        private readonly Socket _socket;
 
+        private Socket _socket;
         private long _writeSeqNumber;
         private long _readSeqNumber;
         private bool _reconnectOnFail;
         private Thread _thread;
-
+        private long _lastActivityTimestamp;
         private readonly MemoryStream _outputBuffer;
         private readonly BinaryWriter _outputBufferWritter;
 
         private readonly MemoryStream _inputBuffer;
         private readonly BinaryReader _inputBufferReader;
+
+        public event EventHandler<ConnectionEventArgs> Disconnected;
+        public event EventHandler<ConnectionEventArgs> Connected;
 
         private HubConnection()
         {
@@ -45,12 +49,13 @@ namespace NiL.Hub
             _inputBufferReader = new BinaryReader(_inputBuffer);
         }
 
-        private HubConnection(Hub hub, Socket socket)
+        private HubConnection(Hub hub, Socket socket, bool reconnectOnFail)
             : this()
         {
             _socket = socket ?? throw new ArgumentNullException(nameof(socket));
             IPEndPoint = (IPEndPoint)socket.RemoteEndPoint;
             _localHub = hub ?? throw new ArgumentNullException(nameof(hub));
+            _reconnectOnFail = reconnectOnFail;
         }
 
         internal bool TryGetLocked(out Locked<HubConnection> lockedHubConnection)
@@ -71,15 +76,14 @@ namespace NiL.Hub
             return new Locked<HubConnection>(this, _sync);
         }
 
-        internal static HubConnection Connect(Hub localHub, IPEndPoint endPoint)
+        internal static HubConnection Connect(Hub localHub, IPEndPoint endPoint, bool autoReconnect)
         {
             var tcpClient = new TcpClient();
             tcpClient.Connect(endPoint);
 
             if (tcpClient.Connected)
             {
-                var hubConnection = AcceptConnected(localHub, tcpClient);
-                hubConnection._reconnectOnFail = true;
+                var hubConnection = AcceptConnected(localHub, tcpClient, autoReconnect);
 
                 hubConnection.doHandshake();
 
@@ -92,7 +96,6 @@ namespace NiL.Hub
         private void doHandshake()
         {
             sendHello();
-
             waitStateChange(HubConnectionState.Active, _HandshakeTimeout, "Timeout while handshake");
         }
 
@@ -110,9 +113,9 @@ namespace NiL.Hub
                 throw new TimeoutException(errorMessage);
         }
 
-        internal static HubConnection AcceptConnected(Hub localHub, TcpClient tcpClient)
+        internal static HubConnection AcceptConnected(Hub localHub, TcpClient tcpClient, bool reconnectOnFail)
         {
-            var connectionHolder = new HubConnection(localHub, tcpClient.Client);
+            var connectionHolder = new HubConnection(localHub, tcpClient.Client, reconnectOnFail);
 
             lock (localHub._hubsConnctions)
             {
@@ -142,58 +145,93 @@ namespace NiL.Hub
             List<Action> doAfter = new List<Action>();
             for (; ; )
             {
-                var bytesToRead = 0;
-                while (_socket.Connected)
+                if (_socket.Connected)
                 {
-                    _socket.Poll(10000, SelectMode.SelectRead);
-
-                    while (_socket.Available > 2 || (bytesToRead > 0 && _socket.Available > 0))
+                    try
                     {
-                        try
+                        var bytesToRead = 0;
+                        while (_socket.Connected)
                         {
-                            var chunkSize = bytesToRead == 0 ? 2 : Math.Min(_socket.Available, bytesToRead);
-                            var oldLen = _inputBuffer.Length;
-                            _inputBuffer.SetLength(oldLen + chunkSize);
-                            _socket.Receive(_inputBuffer.GetBuffer(), (int)oldLen, chunkSize, SocketFlags.None);
-
-                            if (bytesToRead == 0)
-                                bytesToRead = _inputBufferReader.ReadUInt16(); // size of data
-                            else
-                                bytesToRead -= chunkSize;
-
-                            if (bytesToRead == 0)
+                            if ((DateTime.Now.Ticks - _lastActivityTimestamp) >= TimeSpan.FromSeconds(15).Ticks)
                             {
-                                doAfter.Clear();
-
                                 lock (_sync)
                                 {
-                                    processReceived(doAfter, RemoteHub == null ? -1 : RemoteHub.Id, (int)_inputBuffer.Length - sizeof(ushort));
-                                    _inputBuffer.SetLength(0);
-
-                                    if (_outputBuffer.Length != 0)
-                                        FlushOutputBuffer();
+                                    writePing();
+                                    FlushOutputBuffer();
                                 }
+                            }
 
-                                if (doAfter.Count != 0)
+                            _socket.Poll(10000, SelectMode.SelectRead);
+
+                            while (_socket.Available > 2 || (bytesToRead > 0 && _socket.Available > 0))
+                            {
+                                try
                                 {
-                                    for (var i = 0; i < doAfter.Count; i++)
-                                        doAfter[i].Invoke();
+                                    var chunkSize = bytesToRead == 0 ? 2 : Math.Min(_socket.Available, bytesToRead);
+                                    var oldLen = _inputBuffer.Length;
+                                    _inputBuffer.SetLength(oldLen + chunkSize);
+                                    _socket.Receive(_inputBuffer.GetBuffer(), (int)oldLen, chunkSize, SocketFlags.None);
+
+                                    if (bytesToRead == 0)
+                                        bytesToRead = _inputBufferReader.ReadUInt16(); // size of data
+                                    else
+                                        bytesToRead -= chunkSize;
+
+                                    if (bytesToRead == 0)
+                                    {
+                                        _lastActivityTimestamp = DateTime.Now.Ticks;
+                                        doAfter.Clear();
+
+                                        lock (_sync)
+                                        {
+                                            processReceived(doAfter, RemoteHub == null ? -1 : RemoteHub.Id, (int)_inputBuffer.Length - sizeof(ushort));
+                                            _inputBuffer.SetLength(0);
+
+                                            if (_outputBuffer.Length != 0)
+                                                FlushOutputBuffer();
+                                        }
+
+                                        if (doAfter.Count != 0)
+                                        {
+                                            for (var i = 0; i < doAfter.Count; i++)
+                                                doAfter[i].Invoke();
+                                        }
+                                    }
+                                }
+                                catch (Exception e)
+                                {
+                                    Console.Error.WriteLine(e);
                                 }
                             }
                         }
-                        catch (Exception e)
-                        {
-                            Console.Error.WriteLine(e);
-                        }
+                    }
+                    catch (Exception)
+                    {
+                    }
+                    finally
+                    {
+                        Console.Error.WriteLine("HubConnectionWorker stoped. " + (_reconnectOnFail ? "Try to reconnect. " : "Reconnect disabled. ") + "(Remote endpoint: " + IPEndPoint + ")");
+
+                        State = HubConnectionState.Disconnected;
+
+                        onDisconnected();
                     }
                 }
 
                 if (_reconnectOnFail)
                 {
                     Thread.Sleep(10000);
-                    _socket.Connect(IPEndPoint);
-                    if (_socket.Connected)
-                        doHandshake();
+                    try
+                    {
+                        _socket.Connect(IPEndPoint);
+                        Console.WriteLine("Reconnected to " + IPEndPoint);
+                        if (_socket.Connected)
+                            sendHello();
+                    }
+                    catch (SocketException)
+                    {
+                        Console.Error.WriteLine("Unable to connect to " + IPEndPoint);
+                    }
                 }
                 else
                     break;
@@ -204,59 +242,70 @@ namespace NiL.Hub
         {
             Debug.Assert(Monitor.IsEntered(_sync));
 
-            if (_outputBuffer.Length > ushort.MaxValue)
+            lock (_sync)
             {
-                _outputBuffer.SetLength(0);
-                throw new InvalidOperationException("Package is to large");
-            }
-
-            var len = (ushort)_outputBuffer.Length;
-            if (len == 0)
-                return;
-
-            try
-            {
-                if (_socket.Poll(1000, SelectMode.SelectWrite))
+                if (_outputBuffer.Length > ushort.MaxValue)
                 {
-                    _outputBufferWritter.Write(len); // size
+                    _outputBuffer.SetLength(0);
+                    throw new InvalidOperationException("Package is to large");
+                }
 
-                    var buffer = _outputBuffer.GetBuffer();
+                var len = (ushort)_outputBuffer.Length;
+                if (len == 0)
+                    return;
 
-                    var segments = new ArraySegment<byte>[2];
-                    segments[0] = new ArraySegment<byte>(buffer, len, 2);
-                    segments[1] = new ArraySegment<byte>(buffer, 0, len);
-
-                    try
+                try
+                {
+                    if (_socket.Poll(1000, SelectMode.SelectWrite))
                     {
-                        _socket.Send(segments);
-                    }
-                    catch (SocketException)
-                    {
-                        invalidateConnection();
-                        throw new HubDisconnectedException(RemoteHub, _localHub);
+                        _outputBufferWritter.Write(len); // size
+
+                        var buffer = _outputBuffer.GetBuffer();
+
+                        var segments = new ArraySegment<byte>[2];
+                        segments[0] = new ArraySegment<byte>(buffer, len, 2);
+                        segments[1] = new ArraySegment<byte>(buffer, 0, len);
+
+                        try
+                        {
+                            _lastActivityTimestamp = DateTime.Now.Ticks;
+                            _socket.Send(segments);
+                        }
+                        catch (SocketException)
+                        {
+                            onDisconnected();
+                            throw new HubDisconnectedException(RemoteHub, _localHub);
+                        }
                     }
                 }
-            }
-            finally
-            {
-                _outputBuffer.SetLength(0);
+                finally
+                {
+                    _outputBuffer.SetLength(0);
+                }
             }
         }
 
         public void Disconnect()
         {
+            _reconnectOnFail = false;
+
             if (State != HubConnectionState.Active)
                 return;
 
-            lock (_sync)
+            try
             {
-                _reconnectOnFail = false;
-                State = HubConnectionState.Disconnecting;
-                writeDisconnect();
-                FlushOutputBuffer();
+                lock (_sync)
+                {
+                    State = HubConnectionState.Disconnecting;
+                    writeDisconnect();
+                    FlushOutputBuffer();
+                }
+            }
+            finally
+            {
+                onDisconnected();
             }
 
-            invalidateConnection();
             waitStateChange(HubConnectionState.Disconnected, _DisconnectTimeout, "Timeout while disconnecting");
         }
 
@@ -264,14 +313,50 @@ namespace NiL.Hub
         {
             lock (_sync)
             {
-                if (State != HubConnectionState.NotInitialized)
-                    throw new InvalidOperationException();
+                if (State != HubConnectionState.NotInitialized && State != HubConnectionState.Disconnected)
+                    throw new InvalidOperationException("State must be " + HubConnectionState.NotInitialized + " or " + HubConnectionState.Disconnected);
 
                 writeHello();
                 FlushOutputBuffer();
-
                 State = HubConnectionState.HelloSent;
             }
+        }
+
+        private void onDisconnected()
+        {
+            State = HubConnectionState.Disconnected;
+
+            invalidateConnection();
+
+            try
+            {
+                if (_socket.Connected)
+                    _socket.Disconnect(false);
+            }
+            catch
+            { }
+
+            _socket = new TcpClient().Client;
+
+            var handler = Disconnected;
+            if (handler != null)
+            {
+                Task.Run(() => handler(this, new ConnectionEventArgs(this)));
+            }
+        }
+
+        private void onConnected()
+        {
+            var handler = Connected;
+            if (handler != null)
+            {
+                Task.Run(() => handler(this, new ConnectionEventArgs(this)));
+            }
+        }
+
+        public void Dispose()
+        {
+            Disconnect();
         }
     }
 }

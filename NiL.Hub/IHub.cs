@@ -20,7 +20,7 @@ namespace NiL.Hub
         void StartListening(IPEndPoint endPoint);
         void StopListening(IPEndPoint endPoint);
 
-        Task Connect(IPEndPoint endPoint);
+        Task<IHubConnection> Connect(IPEndPoint endPoint, bool autoReconnect = true);
 
         Task RegisterInterface<TInterface>(TInterface implementation, int version = default) where TInterface : class;
         Task UnRegisterInterface<TInterface>() where TInterface : class;

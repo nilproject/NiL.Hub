@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using NiL.Exev;
 
 namespace NiL.Hub
@@ -49,8 +50,9 @@ namespace NiL.Hub
                     if (State == HubConnectionState.Disconnecting)
                     {
                         _reconnectOnFail = false;
-                        _socket.Disconnect(false);
-                        State = HubConnectionState.Disconnected;
+
+                        doAfter.Add(onDisconnected);
+                        
                         return;
                     }
 
@@ -60,8 +62,10 @@ namespace NiL.Hub
                 case PackageType.Disconnect:
                 {
                     _reconnectOnFail = false;
-                    State = HubConnectionState.Disconnected;
-                    doAfter.Add(invalidateConnection);
+
+                    State = HubConnectionState.Disconnecting;
+                    doAfter.Add(onDisconnected);
+
                     writeReadyForDisconnect();
                     break;
                 }
@@ -71,6 +75,7 @@ namespace NiL.Hub
                 {
                     var hubId = _inputBufferReader.ReadInt64();
                     var name = _inputBufferReader.ReadString();
+
                     if ((packageType == PackageType.Hello && State == HubConnectionState.NotInitialized)
                         || (packageType == PackageType.HelloResponse && State == HubConnectionState.HelloSent))
                     {
@@ -141,6 +146,8 @@ namespace NiL.Hub
 
                         //Thread.CurrentThread.Name = "Workder for connection from \"" + LocalHub.Name + "\" (" + LocalHub.Id + ") to \"" + RemoteHub.Name + "\" (" + RemoteHub.Id + ")";
                         State = HubConnectionState.Active;
+
+                        onConnected();
                     }
                     else
                     {
@@ -392,7 +399,18 @@ namespace NiL.Hub
                     break;
                 }
 
-                default: throw new NotImplementedException(packageType.ToString());
+                case PackageType.Ping:
+                {
+                    writePong();
+                    break;
+                }
+
+                case PackageType.Pong:
+                {
+                    break;
+                }
+
+                default: throw new NotImplementedException($"Support of package {packageType} not implemented yet");
             }
         }
 
@@ -453,7 +471,7 @@ namespace NiL.Hub
             }
         }
 
-        private void forAllHubConnections(bool includeWithThisHubId, Func<HubConnection, bool> action)
+        private void forAllHubConnections(bool includeThisHubId, Func<HubConnection, bool> action)
         {
             HubConnection[] hubs;
             lock (_localHub._hubsConnctions)
@@ -465,7 +483,7 @@ namespace NiL.Hub
                 if (hubConnection.State != HubConnectionState.Active)
                     continue;
 
-                if (!includeWithThisHubId && hubConnection.RemoteHub.Id == currentRemoteHubId)
+                if (!includeThisHubId && hubConnection.RemoteHub.Id == currentRemoteHubId)
                     continue;
 
                 lock (hubConnection._sync)
@@ -701,7 +719,7 @@ namespace NiL.Hub
             _outputBuffer.Write(serializedExpression);
         }
 
-        internal void WriteResult(int resultAwaitId, byte[] serializedExpression)
+        internal void WriteResult(int resultAwaitId, ReadOnlySpan<byte> serializedExpression)
         {
             Debug.Assert(Monitor.IsEntered(_sync));
 
@@ -716,14 +734,30 @@ namespace NiL.Hub
 
         internal void WriteException(int resultAwaitId, Exception e)
         {
+            Debug.Assert(Monitor.IsEntered(_sync));
+
             _outputBufferWritter.Write((byte)PackageType.Exception);
             _outputBufferWritter.Write(resultAwaitId);
-            _outputBufferWritter.Write(e.Message);
+            _outputBufferWritter.Write(e.GetType().FullName + ": " + e.Message);
         }
 
         private void writeBlob(Span<byte> buffer)
         {
             _outputBuffer.Write(buffer);
+        }
+
+        private void writePing()
+        {
+            Debug.Assert(Monitor.IsEntered(_sync));
+
+            _outputBufferWritter.Write((byte)PackageType.Ping);
+        }
+
+        private void writePong()
+        {
+            Debug.Assert(Monitor.IsEntered(_sync));
+
+            _outputBufferWritter.Write((byte)PackageType.Pong);
         }
     }
 }
