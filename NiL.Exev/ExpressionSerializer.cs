@@ -292,7 +292,6 @@ namespace NiL.Exev
             }
 
             var typeCode = Type.GetTypeCode(type);
-
             switch (typeCode)
             {
                 case TypeCode.Byte:
@@ -383,10 +382,13 @@ namespace NiL.Exev
                         break;
                     }
 
-                    if (value.GetType().IsPrimitive)
+                    Type nestedType = value.GetType();
+                    if (nestedType.IsPrimitive
+                        || nestedType.IsArray
+                        || value is string)
                     {
-                        addType(result, value.GetType());
-                        addValue(result, value, value.GetType());
+                        addType(result, nestedType);
+                        addValue(result, value, nestedType);
                         break;
                     }
 

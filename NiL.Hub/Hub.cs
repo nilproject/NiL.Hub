@@ -536,29 +536,31 @@ namespace NiL.Hub
         {
             return Task.Run(() =>
             {
+                WeakReference<TaskCompletionSource<object>> awaiterRef;
+                var knownAwaiter = false;
+                lock (_awaiters)
+                    knownAwaiter = _awaiters.TryGetValue(awaitId, out awaiterRef);
+
+                if (!knownAwaiter)
+                {
+                    Console.Error.WriteLine("Unknown awaiter #" + awaitId);
+                    return;
+                }
+
+                if (!awaiterRef.TryGetTarget(out var awaiter))
+                    return;
+
                 try
                 {
-                    WeakReference<TaskCompletionSource<object>> awaiterRef;
-                    var knownAwaiter = false;
-                    lock (_awaiters)
-                        knownAwaiter = _awaiters.TryGetValue(awaitId, out awaiterRef);
-
-                    if (!knownAwaiter)
-                    {
-                        Console.Error.WriteLine("Unknown awaiter #" + awaitId);
-                        return;
-                    }
-
-                    if (!awaiterRef.TryGetTarget(out var awaiter))
-                        return;
-
                     var deserialized = _expressionDeserializer.Deserialize(code, Array.Empty<ParameterExpression>());
                     var value = _expressionEvaluator.Eval(deserialized, Array.Empty<Parameter>());
+
                     awaiter.SetResult(value);
                 }
                 catch (Exception e)
                 {
                     Console.Error.WriteLine(e.Message);
+                    awaiter.SetException(e);
                 }
             });
         }
