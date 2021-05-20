@@ -38,7 +38,7 @@ namespace NiL.Hub
         internal readonly ExpressionEvaluator _expressionEvaluator;
 
         internal readonly ExpressionDeserializer _expressionDeserializer;
-        internal readonly Dictionary<int, WeakReference<TaskCompletionSource<object>>> _awaiters = new Dictionary<int, WeakReference<TaskCompletionSource<object>>>();
+        internal readonly Dictionary<int, TaskCompletionSource<object>> _awaiters = new Dictionary<int, TaskCompletionSource<object>>();
 
         public IEnumerable<RemoteHub> KnownHubs => _knownHubs.Values;
         public IEnumerable<HubConnection> Connections => _hubsConnctions.Values.SelectMany(x => x);
@@ -343,8 +343,7 @@ namespace NiL.Hub
             lock (_awaiters)
             {
                 taskAwaitId = Interlocked.Increment(ref _callResultAwaitId);
-                _awaiters.Add(taskAwaitId, new WeakReference<TaskCompletionSource<object>>(taskCompletionSource));
-
+                _awaiters.Add(taskAwaitId, taskCompletionSource);
                 cleanupAwaiters();
             }
 
@@ -367,7 +366,7 @@ namespace NiL.Hub
 
                             foreach (var awaiter in _awaiters)
                             {
-                                if (!awaiter.Value.TryGetTarget(out _))
+                                if (awaiter.Value.Task.IsCompleted || awaiter.Value.Task.IsCanceled)
                                 {
                                     emptyAwaiters ??= new List<int>();
                                     emptyAwaiters.Add(awaiter.Key);
@@ -397,8 +396,10 @@ namespace NiL.Hub
                 {
                     doEval(hubId, awaitId, code, resultTask);
                 }
-                catch
-                { }
+                catch(Exception e)
+                {
+                    Console.Error.WriteLine(e);
+                }
             });
 
             return resultTask.Task;
@@ -532,23 +533,33 @@ namespace NiL.Hub
             }
         }
 
+        private TaskCompletionSource<object> getAwaiter(int awaitId)
+        {
+            TaskCompletionSource<object> awaiter;
+            var knownAwaiter = false;
+            lock (_awaiters)
+                knownAwaiter = _awaiters.TryGetValue(awaitId, out awaiter);
+
+            if (!knownAwaiter)
+            {
+                Console.Error.WriteLine("Unknown awaiter #" + awaitId);
+                return awaiter;
+            }
+
+            //if (!awaiterRef.TryGetTarget(out var awaiter))
+            //{
+            //    Console.Error.WriteLine("Dead awaiter " + awaitId);
+            //    return;
+            //}
+
+            return awaiter;
+        }
+
         internal Task SetResult(int awaitId, byte[] code)
         {
             return Task.Run(() =>
             {
-                WeakReference<TaskCompletionSource<object>> awaiterRef;
-                var knownAwaiter = false;
-                lock (_awaiters)
-                    knownAwaiter = _awaiters.TryGetValue(awaitId, out awaiterRef);
-
-                if (!knownAwaiter)
-                {
-                    Console.Error.WriteLine("Unknown awaiter #" + awaitId);
-                    return;
-                }
-
-                if (!awaiterRef.TryGetTarget(out var awaiter))
-                    return;
+                var awaiter = getAwaiter(awaitId);
 
                 try
                 {
@@ -571,19 +582,7 @@ namespace NiL.Hub
             {
                 try
                 {
-                    WeakReference<TaskCompletionSource<object>> awaiterRef;
-                    var knownAwaiter = false;
-                    lock (_awaiters)
-                        knownAwaiter = _awaiters.TryGetValue(awaitId, out awaiterRef);
-
-                    if (!knownAwaiter)
-                    {
-                        Console.Error.WriteLine("Unknown awaiter #" + awaitId);
-                        return;
-                    }
-
-                    if (!awaiterRef.TryGetTarget(out var awaiter))
-                        return;
+                    var awaiter = getAwaiter(awaitId);
 
                     awaiter.SetException(new RemoteException(message));
                 }

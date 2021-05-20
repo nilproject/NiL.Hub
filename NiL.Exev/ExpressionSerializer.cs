@@ -28,7 +28,7 @@ namespace NiL.Exev
 
         public byte[] Serialize(Expression expression, params ParameterExpression[] parameterExpressions)
         {
-            var result = new List<byte>();
+            var result = new List<byte>(128);
             var parameters = new List<ParameterExpression>(parameterExpressions);
             serialize(expression, parameters, result);
             return result.ToArray();

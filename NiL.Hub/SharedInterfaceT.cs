@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq.Expressions;
+using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 
 namespace NiL.Hub
@@ -25,6 +26,7 @@ namespace NiL.Hub
 
         public Task<TResult> Call<TResult>(Expression<Func<IInterface, Task<TResult>>> expression, int version = default) => callImpl<TResult>(expression, version);
 
+        [MethodImpl(MethodImplOptions.NoOptimization)]
         private Task<TResult> callImpl<TResult>(Expression expression, int version)
         {
             if (LocalImplementation != null && (version == 0 || LocalVersion == version))
@@ -34,12 +36,11 @@ namespace NiL.Hub
 
             return taskSource.Task.ContinueWith(x =>
             {
-                GC.KeepAlive(taskSource); // should live while task is alive                    
+                var task = taskSource.Task;
+                if (task.IsFaulted)
+                    throw task.Exception.InnerException;
 
-                if (x.IsFaulted)
-                    throw x.Exception.InnerException;
-
-                return (TResult)x.Result;
+                return (TResult)task.Result;
             });
         }
 
@@ -68,12 +69,23 @@ namespace NiL.Hub
 
             var serializedExpression = hub.Hub._expressionSerializer.Serialize(expression, Array.Empty<ParameterExpression>());
 
-            using var connection = hub.Hub._connections.GetLockedConenction();
+            while (hub.Hub._connections.Count > 0)
+            {
+                try
+                {
+                    using var connection = hub.Hub._connections.GetLockedConenction();
+                    connection.Value.WriteRetransmitTo(hub.Hub.Id, c => c.WriteCall(taskAwaitId, serializedExpression));
+                    connection.Value.FlushOutputBuffer();
 
-            connection.Value.WriteRetransmitTo(hub.Hub.Id, c => c.WriteCall(taskAwaitId, serializedExpression));
-            connection.Value.FlushOutputBuffer();
+                    return taskSource;
+                }
+                catch (HubDisconnectedException e)
+                {
+                    Console.Error.WriteLine(e);
+                }
+            }
 
-            return taskSource;
+            throw new InvalidOperationException("All hubs are disconnected");
         }
 
         public Task Call(Expression<Action<IInterface>> expression, int version = default)
