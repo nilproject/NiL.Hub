@@ -90,6 +90,53 @@
         Exception = 0x22,
 
         /// <summary>
+        /// Int32: Stream id
+        /// </summary>
+        StreamGetInfo = 0x30,
+
+        /// <summary>
+        /// Int32: Stream id
+        /// Int64: length <br/>
+        /// Int64: position <br/>
+        /// byte: flags <br/>
+        ///       0x1: can read <br/>
+        ///       0x2: can write <br/>
+        ///       0x4: can seek
+        /// </summary>
+        StreamInfo = 0x31,
+
+        /// <summary>
+        /// Int32: Stream id
+        /// </summary>
+        StreamClose = 0x32,
+
+        /// <summary>
+        /// Int32: Stream id <br/>
+        /// Int16: Bytes count
+        /// </summary>
+        StreamRead = 0x33,
+
+        /// <summary>
+        /// Int32: Stream id <br/>
+        /// Int16: Bytes count <br/>
+        /// N of byte: data
+        /// </summary>
+        StreamWrite = 0x34,
+
+        /// <summary>
+        /// Int32: Stream id <br/>
+        /// Int64: new position
+        /// </summary>
+        StreamSeek = 0x35,
+
+        /// <summary>
+        /// Int32: Stream id <br/>
+        /// Int16: bytes count <br/>
+        /// N of bytes
+        /// </summary>
+        StreamData = 0x36,
+
+        /// <summary>
         /// Int32: Error code <br/>
         /// String: Message
         /// </summary>

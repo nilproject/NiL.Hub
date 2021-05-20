@@ -26,7 +26,6 @@ namespace NiL.Hub
 
         public Task<TResult> Call<TResult>(Expression<Func<IInterface, Task<TResult>>> expression, int version = default) => callImpl<TResult>(expression, version);
 
-        [MethodImpl(MethodImplOptions.NoOptimization)]
         private Task<TResult> callImpl<TResult>(Expression expression, int version)
         {
             if (LocalImplementation != null && (version == 0 || LocalVersion == version))
@@ -46,34 +45,44 @@ namespace NiL.Hub
 
         private TaskCompletionSource<object> sendExpression(Expression expression, int version)
         {
-            var index = Environment.TickCount % Hubs.Count;
-            var hub = Hubs[index];
-
-            if (version != 0 && hub.Version != version)
+            while (Hubs.Count > 0)
             {
-                for (var i = 0; i < Hubs.Count; i++)
+                var index = Environment.TickCount % Hubs.Count;
+                var hub = Hubs[index];
+
+                if (version != 0 && hub.Version != version)
                 {
-                    var h = Hubs[(index + i) % Hubs.Count];
-                    if (h.Version == version)
+                    for (var i = 0; i < Hubs.Count; i++)
                     {
-                        hub = h;
-                        break;
+                        var h = Hubs[(index + i) % Hubs.Count];
+                        if (h.Version == version)
+                        {
+                            hub = h;
+                            break;
+                        }
                     }
                 }
-            }
 
-            if (!hub.Hub._typesMap.HasOwn(typeof(IInterface)))
-                hub.Hub._typesMap.Add(typeof(IInterface), hub.InterfaceId);
+                if (!hub.Hub._typesMap.HasOwn(typeof(IInterface)))
+                {
+                    try
+                    {
+                        hub.Hub._typesMap.Add(typeof(IInterface), hub.InterfaceId);
+                    }
+                    catch (ArgumentException)
+                    { }
+                }
 
-            var taskSource = _hub.AllocTaskCompletionSource(out var taskAwaitId);
+                var taskSource = _hub.AllocTaskCompletionSource(out var taskAwaitId);
 
-            var serializedExpression = hub.Hub._expressionSerializer.Serialize(expression, Array.Empty<ParameterExpression>());
+                var serializedExpression = hub.Hub._expressionSerializer.Serialize(expression, Array.Empty<ParameterExpression>());
 
-            while (hub.Hub._connections.Count > 0)
-            {
                 try
                 {
                     using var connection = hub.Hub._connections.GetLockedConenction();
+                    if (connection == null)
+                        continue;
+
                     connection.Value.WriteRetransmitTo(hub.Hub.Id, c => c.WriteCall(taskAwaitId, serializedExpression));
                     connection.Value.FlushOutputBuffer();
 

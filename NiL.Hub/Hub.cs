@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Net;
@@ -21,11 +22,9 @@ namespace NiL.Hub
             public Func<IList, object> ToArray;
         }
 
-        private static readonly int _awaiterCleanupInterval = TimeSpan.FromSeconds(10).Milliseconds;
-
         private uint _interfaceIdCounter;
         private volatile int _callResultAwaitId;
-        private int _lastCleanupTimestamp;
+        private volatile int _streamsId;
 
         private readonly Dictionary<Type, _ToArrayTools> _toArrayTools = new Dictionary<Type, _ToArrayTools>();
 
@@ -35,6 +34,8 @@ namespace NiL.Hub
         internal readonly Dictionary<IPEndPoint, Thread> _listeners = new Dictionary<IPEndPoint, Thread>();
         internal readonly Dictionary<IPEndPoint, List<HubConnection>> _hubsConnctions = new Dictionary<IPEndPoint, List<HubConnection>>();
         internal readonly Dictionary<long, RemoteHub> _knownHubs = new Dictionary<long, RemoteHub>();
+        internal readonly Dictionary<int, Stream> _streams = new Dictionary<int, Stream>();
+        internal readonly Dictionary<(long, int), TaskCompletionSource<RemoteStream>> _remoteStreams = new Dictionary<(long, int), TaskCompletionSource<RemoteStream>>();
         internal readonly ExpressionEvaluator _expressionEvaluator;
 
         internal readonly ExpressionDeserializer _expressionDeserializer;
@@ -51,7 +52,7 @@ namespace NiL.Hub
         { }
 
         public Hub(string name)
-            : this((uint)name.GetHashCode() ^ DateTime.Now.GetHashCode() ^ Environment.TickCount.GetHashCode(), name)
+            : this((uint)(name.GetHashCode() ^ DateTime.Now.GetHashCode() ^ Environment.TickCount), name)
         { }
 
         public Hub(long id, string name)
@@ -336,6 +337,43 @@ namespace NiL.Hub
             throw new NotImplementedException();
         }
 
+        public int RegisterStream(Stream stream)
+        {
+            if (stream is null)
+                throw new ArgumentNullException(nameof(stream));
+
+            lock (_streams)
+            {
+                var id = Interlocked.Increment(ref _streamsId);
+                _streams.Add(id, stream);
+                return id;
+            }
+        }
+
+        public Task<RemoteStream> GetRemoteStream(long hubId, int streamId)
+        {
+            TaskCompletionSource<RemoteStream> remoteStream;
+            lock (_remoteStreams)
+            {
+                if (_remoteStreams.TryGetValue((hubId, streamId), out remoteStream))
+                    return remoteStream.Task;
+
+                remoteStream = new TaskCompletionSource<RemoteStream>();
+                _remoteStreams[(hubId, streamId)] = remoteStream;
+            }
+
+            var hub = _knownHubs[hubId];
+            using var connection = hub._connections.GetLockedConenction();
+            connection.Value.WriteRetransmitTo(hubId, x =>
+            {
+                x.WriteStreamGetInfo(streamId);
+            });
+
+            connection.Value.FlushOutputBuffer();
+
+            return remoteStream.Task;
+        }
+
         internal TaskCompletionSource<object> AllocTaskCompletionSource(out int taskAwaitId)
         {
             var taskCompletionSource = new TaskCompletionSource<object>();
@@ -344,46 +382,9 @@ namespace NiL.Hub
             {
                 taskAwaitId = Interlocked.Increment(ref _callResultAwaitId);
                 _awaiters.Add(taskAwaitId, taskCompletionSource);
-                cleanupAwaiters();
             }
 
             return taskCompletionSource;
-        }
-
-        private void cleanupAwaiters()
-        {
-            lock (_awaiters)
-            {
-                if (_awaiters.Count > 100 && Environment.TickCount - _lastCleanupTimestamp > _awaiterCleanupInterval)
-                {
-                    Task.Run(() =>
-                    {
-                        lock (_awaiters)
-                        {
-                            _lastCleanupTimestamp = Environment.TickCount;
-
-                            List<int> emptyAwaiters = null;
-
-                            foreach (var awaiter in _awaiters)
-                            {
-                                if (awaiter.Value.Task.IsCompleted || awaiter.Value.Task.IsCanceled)
-                                {
-                                    emptyAwaiters ??= new List<int>();
-                                    emptyAwaiters.Add(awaiter.Key);
-                                }
-                            }
-
-                            if (emptyAwaiters != null)
-                            {
-                                foreach (var key in emptyAwaiters)
-                                {
-                                    _awaiters.Remove(key);
-                                }
-                            }
-                        }
-                    });
-                }
-            }
         }
 
         internal Task Eval(long hubId, int awaitId, byte[] code)
@@ -396,7 +397,7 @@ namespace NiL.Hub
                 {
                     doEval(hubId, awaitId, code, resultTask);
                 }
-                catch(Exception e)
+                catch (Exception e)
                 {
                     Console.Error.WriteLine(e);
                 }
@@ -538,19 +539,17 @@ namespace NiL.Hub
             TaskCompletionSource<object> awaiter;
             var knownAwaiter = false;
             lock (_awaiters)
+            {
                 knownAwaiter = _awaiters.TryGetValue(awaitId, out awaiter);
+                if (knownAwaiter)
+                    _awaiters.Remove(awaitId);
+            }
 
             if (!knownAwaiter)
             {
                 Console.Error.WriteLine("Unknown awaiter #" + awaitId);
                 return awaiter;
             }
-
-            //if (!awaiterRef.TryGetTarget(out var awaiter))
-            //{
-            //    Console.Error.WriteLine("Dead awaiter " + awaitId);
-            //    return;
-            //}
 
             return awaiter;
         }

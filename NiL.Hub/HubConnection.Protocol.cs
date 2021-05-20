@@ -52,7 +52,7 @@ namespace NiL.Hub
                         _reconnectOnFail = false;
 
                         doAfter.Add(onDisconnected);
-                        
+
                         return;
                     }
 
@@ -410,6 +410,208 @@ namespace NiL.Hub
                     break;
                 }
 
+                case PackageType.StreamGetInfo:
+                {
+                    var streamId = _inputBufferReader.ReadInt32();
+
+                    doAfter.Add(() =>
+                    {
+                        RemoteHub remoteHub;
+                        lock (_localHub._knownHubs)
+                        {
+                            if (!_localHub._knownHubs.TryGetValue(senderId, out remoteHub))
+                            {
+                                writeError(ErrorCode.UnknownHub, "Unknown hub #" + senderId);
+                                return;
+                            }
+                        }
+
+                        using var connection = remoteHub._connections.GetLockedConenction();
+                        lock (_localHub._streams)
+                        {
+                            if (_localHub._streams.TryGetValue(streamId, out var stream))
+                            {
+                                connection.Value.WriteStreamInfo(streamId, stream.Length, stream.Position, stream.CanSeek, stream.CanWrite, stream.CanRead);
+                            }
+                            else
+                            {
+                                connection.Value.WriteStreamInfo(streamId, 0, 0, false, false, false);
+                            }
+                        }
+
+                        connection.Value.FlushOutputBuffer();
+                    });
+
+                    break;
+                }
+
+                case PackageType.StreamInfo:
+                {
+                    var streamId = _inputBufferReader.ReadInt32();
+                    var length = _inputBufferReader.ReadInt64();
+                    var position = _inputBufferReader.ReadInt64();
+                    var flags = _inputBufferReader.ReadByte();
+
+                    lock (_localHub._remoteStreams)
+                    {
+                        if (_localHub._remoteStreams.TryGetValue((senderId, streamId), out var remoteStreamTask))
+                        {
+                            if ((flags & 3) != 0)
+                            {
+                                if (remoteStreamTask.Task.IsCompleted)
+                                {
+                                    var stream = remoteStreamTask.Task.Result;
+                                    stream.CanRead = (flags & 1) != 0;
+                                    stream.CanWrite = (flags & 2) != 0;
+                                    stream.CanSeek = (flags & 4) != 0;
+                                    stream.Position = position;
+                                    stream.Length = length;
+                                }
+                                else
+                                {
+                                    remoteStreamTask
+                                        .SetResult(
+                                            new RemoteStream(
+                                                _localHub,
+                                                RemoteHub,
+                                                streamId,
+                                                length,
+                                                position,
+                                                (flags & 1) != 0,
+                                                (flags & 2) != 0,
+                                                (flags & 4) != 0));
+                                }
+                            }
+                            else
+                            {
+                                remoteStreamTask.SetException(new KeyNotFoundException("Unknown stream"));
+                            }
+                        }
+                    }
+
+                    break;
+                }
+
+                case PackageType.StreamRead:
+                {
+                    var streamId = _inputBufferReader.ReadInt32();
+                    var count = _inputBufferReader.ReadUInt16();
+
+                    doAfter.Add(() =>
+                    {
+                        RemoteHub remoteHub;
+                        lock (_localHub._knownHubs)
+                        {
+                            if (!_localHub._knownHubs.TryGetValue(senderId, out remoteHub))
+                            {
+                                writeError(ErrorCode.UnknownHub, "Unknown hub #" + senderId);
+                                return;
+                            }
+                        }
+
+                        using var connection = remoteHub._connections.GetLockedConenction();
+                        lock (_localHub._streams)
+                        {
+                            if (_localHub._streams.TryGetValue(streamId, out var stream))
+                            {
+                                var buffer = new byte[count];
+                                var r = stream.Read(buffer);
+                                if (r < buffer.Length)
+                                    Array.Resize(ref buffer, r);
+
+                                connection.Value.WriteStreamInfo(streamId, stream.Length, stream.Position, stream.CanSeek, stream.CanWrite, stream.CanRead);
+                                connection.Value.WriteStreamData(streamId, buffer);
+                            }
+                            else
+                            {
+                                connection.Value.WriteStreamData(streamId, Array.Empty<byte>());
+                            }
+                        }
+
+                        connection.Value.FlushOutputBuffer();
+                    });
+
+                    break;
+                }
+
+                case PackageType.StreamData:
+                {
+                    var streamId = _inputBufferReader.ReadInt32();
+                    var count = _inputBufferReader.ReadUInt16();
+                    var data = _inputBufferReader.ReadBytes(count);
+
+                    lock (_localHub._remoteStreams)
+                    {
+                        if (_localHub._remoteStreams.TryGetValue((senderId, streamId), out var remoteStreamTask))
+                        {
+                            if (remoteStreamTask.Task.IsCompleted)
+                            {
+                                var stream = remoteStreamTask.Task.Result;
+                                stream.ReceiveData(data);
+                            }
+                        }
+                    }
+
+                    break;
+                }
+
+                case PackageType.StreamWrite:
+                {
+                    var streamId = _inputBufferReader.ReadInt32();
+                    var count = _inputBufferReader.ReadUInt16();
+                    var data = _inputBufferReader.ReadBytes(count);
+
+                    doAfter.Add(() =>
+                    {
+                        RemoteHub remoteHub;
+                        lock (_localHub._knownHubs)
+                        {
+                            if (!_localHub._knownHubs.TryGetValue(senderId, out remoteHub))
+                            {
+                                writeError(ErrorCode.UnknownHub, "Unknown hub #" + senderId);
+                                return;
+                            }
+                        }
+
+                        using var connection = remoteHub._connections.GetLockedConenction();
+                        lock (_localHub._streams)
+                        {
+                            if (_localHub._streams.TryGetValue(streamId, out var stream))
+                            {
+                                stream.Write(data);
+
+                                connection.Value.WriteStreamInfo(streamId, stream.Length, stream.Position, stream.CanSeek, stream.CanWrite, stream.CanRead);
+                                connection.Value.WriteStreamData(streamId, Array.Empty<byte>());
+                            }
+                            else
+                            {
+                                connection.Value.WriteStreamData(streamId, Array.Empty<byte>());
+                            }
+                        }
+
+                        connection.Value.FlushOutputBuffer();
+                    });
+
+                    break;
+                }
+
+                case PackageType.StreamClose:
+                {
+                    var streamId = _inputBufferReader.ReadInt32();
+
+                    lock (_localHub._streams)
+                    {
+                        if (_localHub._streams.TryGetValue(streamId, out var stream))
+                        {
+                            stream.Close();
+                        }
+
+                        _localHub._streams.Remove(streamId);
+                    }
+
+                    break;
+                }
+
                 default: throw new NotImplementedException($"Support of package {packageType} not implemented yet");
             }
         }
@@ -739,6 +941,67 @@ namespace NiL.Hub
             _outputBufferWritter.Write((byte)PackageType.Exception);
             _outputBufferWritter.Write(resultAwaitId);
             _outputBufferWritter.Write(e.GetType().FullName + ": " + e.Message);
+        }
+
+        internal void WriteStreamGetInfo(int streamId)
+        {
+            Debug.Assert(Monitor.IsEntered(_sync));
+
+            _outputBufferWritter.Write((byte)PackageType.StreamGetInfo);
+            _outputBufferWritter.Write(streamId);
+        }
+
+        internal void WriteStreamInfo(int streamId, long length, long position, bool canSeek, bool canWrite, bool canRead)
+        {
+            Debug.Assert(Monitor.IsEntered(_sync));
+
+            var flags =
+                (canRead ? 1 : 0)
+                | (canWrite ? 2 : 0)
+                | (canSeek ? 4 : 0);
+
+            _outputBufferWritter.Write((byte)PackageType.StreamInfo);
+            _outputBufferWritter.Write(streamId);
+            _outputBufferWritter.Write(length);
+            _outputBufferWritter.Write(position);
+            _outputBufferWritter.Write((byte)flags);
+        }
+
+        internal void WriteStreamRead(int streamId, ushort length)
+        {
+            Debug.Assert(Monitor.IsEntered(_sync));
+
+            _outputBufferWritter.Write((byte)PackageType.StreamRead);
+            _outputBufferWritter.Write(streamId);
+            _outputBufferWritter.Write(length);
+        }
+
+        internal void WriteStreamWrite(int streamId, ArraySegment<byte> data)
+        {
+            Debug.Assert(Monitor.IsEntered(_sync));
+
+            _outputBufferWritter.Write((byte)PackageType.StreamWrite);
+            _outputBufferWritter.Write(streamId);
+            _outputBufferWritter.Write((ushort)data.Count);
+            _outputBufferWritter.Write(data);
+        }
+
+        internal void WriteStreamClose(int streamId)
+        {
+            Debug.Assert(Monitor.IsEntered(_sync));
+
+            _outputBufferWritter.Write((byte)PackageType.StreamClose);
+            _outputBufferWritter.Write(streamId);
+        }
+
+        private void WriteStreamData(int streamId, byte[] buffer)
+        {
+            Debug.Assert(Monitor.IsEntered(_sync));
+
+            _outputBufferWritter.Write((byte)PackageType.StreamData);
+            _outputBufferWritter.Write(streamId);
+            _outputBufferWritter.Write((ushort)buffer.Length);
+            _outputBufferWritter.Write(buffer);
         }
 
         private void writeBlob(Span<byte> buffer)
