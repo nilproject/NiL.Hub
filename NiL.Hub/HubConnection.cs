@@ -101,6 +101,10 @@ namespace NiL.Hub
 
         private void waitStateChange(HubConnectionState expectedState, int timeout, string errorMessage)
         {
+#if DEBUG
+            if (Debugger.IsAttached)
+                timeout = int.MaxValue;
+#endif
             var startWaiting = Environment.TickCount;
 
             while (State != expectedState && Environment.TickCount - startWaiting < timeout)

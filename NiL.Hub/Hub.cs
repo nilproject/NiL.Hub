@@ -446,9 +446,22 @@ namespace NiL.Hub
                             var expr = Expression.Call(Expression.Constant(awaiter), getResult);
                             awaiter.UnsafeOnCompleted(() =>
                             {
-                                type = getResult.ReturnType;
-                                result = _expressionEvaluator.Eval(expr);
-                                unwrapAndSend();
+                                try
+                                {
+                                    type = getResult.ReturnType;
+                                    result = _expressionEvaluator.Eval(expr);
+                                    unwrapAndSend();
+                                }
+                                catch (Exception e)
+                                {
+                                    using var connection = hub._connections.GetLockedConenction();
+                                    connection.Value.WriteRetransmitTo(hubId, c => c.WriteException(awaitId, e));
+                                    connection.Value.FlushOutputBuffer();
+
+                                    resultTask.SetException(e);
+
+                                    Console.Error.WriteLine(e.Message);
+                                }
                             });
                         }
                         else

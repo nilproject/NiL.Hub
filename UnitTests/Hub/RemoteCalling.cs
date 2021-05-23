@@ -130,11 +130,13 @@ namespace UnitTests.HubTests
         }
 
         [TestMethod]
-        [Timeout(1000)]
+        //[Timeout(1000)]
         public void RemoteCallWithMediator()
         {
             using var hub1 = new Hub(777005, "hub 1");
             var endpoint1 = new IPEndPoint(IPAddress.Loopback, 4500);
+
+            hub1.RegisterInterface<ITestInterface>(new TestImplementation()).Wait();
 
             using var hub2 = new Hub(777006, "hub 2");
             hub2.PathThrough = true;
@@ -145,10 +147,11 @@ namespace UnitTests.HubTests
             hub1.StartListening(endpoint1);
             hub2.Connect(endpoint1).Wait();
 
+            while (!hub2.TryGet<ITestInterface>(out _))
+                Thread.Sleep(1);
+
             hub2.StartListening(endpoint2);
             hub3.Connect(endpoint2).Wait();
-
-            hub1.RegisterInterface<ITestInterface>(new TestImplementation()).Wait();
 
             while (!hub3.TryGet<ITestInterface>(out _))
                 Thread.Sleep(1);

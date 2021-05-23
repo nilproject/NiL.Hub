@@ -97,31 +97,6 @@ namespace NiL.Hub
                         if (packageType == PackageType.Hello)
                             writeHelloResponse();
 
-                        foreach (var @interface in _localHub._knownInterfaces)
-                        {
-                            var localReg = @interface.Value.LocalImplementation != null;
-                            var count = @interface.Value.Hubs.Count + (localReg ? 1 : 0);
-
-                            var hubs = new long[count];
-                            var intIds = new uint[count];
-                            var versions = new int[count];
-                            for (var i = 0; i < @interface.Value.Hubs.Count; i++)
-                            {
-                                hubs[i] = @interface.Value.Hubs[i].Hub.Id;
-                                intIds[i] = @interface.Value.Hubs[i].InterfaceId;
-                                versions[i] = @interface.Value.Hubs[i].Version;
-                            }
-
-                            if (localReg)
-                            {
-                                hubs[count - 1] = _localHub.Id;
-                                intIds[count - 1] = @interface.Value.LocalId;
-                                versions[count - 1] = @interface.Value.LocalVersion;
-                            }
-
-                            writeRegisterInterface(hubs, @interface.Key, intIds, versions);
-                        }
-
                         if (_localHub.PathThrough)
                         {
                             // to this about all
@@ -143,6 +118,49 @@ namespace NiL.Hub
                                 });
                             });
                         }
+
+                        doAfter.Add(() =>
+                        {
+                            lock (_sync)
+                            {
+                                lock (_localHub._knownInterfaces)
+                                {
+                                    foreach (var @interface in _localHub._knownInterfaces)
+                                    {
+                                        var localReg = @interface.Value.LocalImplementation != null;
+                                        if (!localReg && !_localHub.PathThrough)
+                                            continue;
+
+                                        var count = !_localHub.PathThrough ? 1 : @interface.Value.Hubs.Count + (localReg ? 1 : 0);
+
+                                        var hubs = new long[count];
+                                        var intIds = new uint[count];
+                                        var versions = new int[count];
+
+                                        if (_localHub.PathThrough)
+                                        {
+                                            for (var i = 0; i < @interface.Value.Hubs.Count; i++)
+                                            {
+                                                hubs[i] = @interface.Value.Hubs[i].Hub.Id;
+                                                intIds[i] = @interface.Value.Hubs[i].InterfaceId;
+                                                versions[i] = @interface.Value.Hubs[i].Version;
+                                            }
+                                        }
+
+                                        if (localReg)
+                                        {
+                                            hubs[count - 1] = _localHub.Id;
+                                            intIds[count - 1] = @interface.Value.LocalId;
+                                            versions[count - 1] = @interface.Value.LocalVersion;
+                                        }
+
+                                        writeRegisterInterface(hubs, @interface.Key, intIds, versions);
+                                    }
+
+                                    FlushOutputBuffer();
+                                }
+                            }
+                        });
 
                         //Thread.CurrentThread.Name = "Workder for connection from \"" + LocalHub.Name + "\" (" + LocalHub.Id + ") to \"" + RemoteHub.Name + "\" (" + RemoteHub.Id + ")";
                         State = HubConnectionState.Active;
