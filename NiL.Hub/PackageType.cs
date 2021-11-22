@@ -125,16 +125,23 @@
 
         /// <summary>
         /// Int32: Stream id <br/>
-        /// Int64: new position
+        /// Int64: offset
+        /// byte: SeekOrigin
         /// </summary>
         StreamSeek = 0x35,
+
+        /// <summary>
+        /// Int32: Stream id <br/>
+        /// Int64: new length
+        /// </summary>
+        StreamSetLength = 0x36,
 
         /// <summary>
         /// Int32: Stream id <br/>
         /// Int16: bytes count <br/>
         /// N of bytes
         /// </summary>
-        StreamData = 0x36,
+        StreamData = 0x37,
 
         /// <summary>
         /// Int32: Error code <br/>

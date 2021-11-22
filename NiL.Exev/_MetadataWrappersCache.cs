@@ -32,16 +32,21 @@ namespace NiL.Exev
 
         internal static Array CreateArray(Type type, int length)
         {
+            Func<int, Array> ctor;
+
             lock (_ArraysCtors)
             {
-                if (_ArraysCtors.TryGetValue(type, out var ctor))
+                if (_ArraysCtors.TryGetValue(type, out ctor))
                     return ctor(length);
+            }
 
-                var param = Expression.Parameter(typeof(int), "len");
-                var expr = Expression.New(type.GetConstructor(new[] { typeof(int) }), param);
-                var lambda = Expression.Lambda<Func<int, Array>>(expr, param).Compile();
+            var param = Expression.Parameter(typeof(int), "len");
+            var expr = Expression.New(type.GetConstructor(new[] { typeof(int) }), param);
+            var lambda = Expression.Lambda<Func<int, Array>>(expr, param).Compile();
 
-                _ArraysCtors.Add(type, lambda);
+            lock (_ArraysCtors)
+            {
+                _ArraysCtors[type] = lambda;
 
                 return lambda(length);
             }
@@ -49,32 +54,37 @@ namespace NiL.Exev
 
         internal static Func<Stack<object>, object> GetCtor(ConstructorInfo constructor)
         {
+            Func<Stack<object>, object> ctor;
+
             lock (_ProxiedCtors)
             {
-                if (_ProxiedCtors.TryGetValue(constructor, out var ctor))
+                if (_ProxiedCtors.TryGetValue(constructor, out ctor))
                     return ctor;
+            }
 
-                var parameters = constructor.GetParameters();
-                var body = new Expression[parameters.Length + 1];
-                var variables = new ParameterExpression[parameters.Length];
-                for (var i = 0; i < parameters.Length; i++)
-                {
-                    var variable = Expression.Parameter(parameters[i].ParameterType, parameters[i].Name);
-                    variables[i] = variable;
-                    body[parameters.Length - i - 1] = Expression.Assign(variable, Expression.Convert(Expression.Call(_StackPrm, _StackPopMethod), parameters[i].ParameterType));
-                }
+            var parameters = constructor.GetParameters();
+            var body = new Expression[parameters.Length + 1];
+            var variables = new ParameterExpression[parameters.Length];
+            for (var i = 0; i < parameters.Length; i++)
+            {
+                var variable = Expression.Parameter(parameters[i].ParameterType, parameters[i].Name);
+                variables[i] = variable;
+                body[parameters.Length - i - 1] = Expression.Assign(variable, Expression.Convert(Expression.Call(_StackPrm, _StackPopMethod), parameters[i].ParameterType));
+            }
 
-                body[parameters.Length] = Expression.New(constructor, variables);
+            body[parameters.Length] = Expression.New(constructor, variables);
 
-                var methodBody = (Expression)Expression.Block(variables, body);
+            var methodBody = (Expression)Expression.Block(variables, body);
 
-                if (methodBody.Type.IsValueType)
-                {
-                    methodBody = Expression.Convert(methodBody, typeof(object));
-                }
+            if (methodBody.Type.IsValueType)
+            {
+                methodBody = Expression.Convert(methodBody, typeof(object));
+            }
 
-                ctor = Expression.Lambda<Func<Stack<object>, object>>(methodBody, _StackPrm).Compile();
+            ctor = Expression.Lambda<Func<Stack<object>, object>>(methodBody, _StackPrm).Compile();
 
+            lock (_ProxiedCtors)
+            {
                 _ProxiedCtors[constructor] = ctor;
                 return ctor;
             }
@@ -82,13 +92,18 @@ namespace NiL.Exev
 
         internal static Func<Stack<object>, object> GetMethod(MethodInfo methodInfo)
         {
+            Func<Stack<object>, object> method;
+
             lock (_ProxiedMethods)
             {
-                if (_ProxiedMethods.TryGetValue(methodInfo, out var method))
+                if (_ProxiedMethods.TryGetValue(methodInfo, out method))
                     return method;
+            }
 
-                method = proxyMethod(methodInfo);
+            method = proxyMethod(methodInfo);
 
+            lock (_ProxiedMethods)
+            {
                 _ProxiedMethods[methodInfo] = method;
                 return method;
             }
@@ -132,14 +147,19 @@ namespace NiL.Exev
 
         internal static Func<Stack<object>, object> WrapLambda(Delegate srcLambda)
         {
+            Func<Stack<object>, object> method;
+            var type = srcLambda.GetType();
+
             lock (_ProxiedDelegates)
             {
-                var type = srcLambda.GetType();
-                if (_ProxiedDelegates.TryGetValue(type, out var method))
+                if (_ProxiedDelegates.TryGetValue(type, out method))
                     return method;
+            }
 
-                method = proxyMethod(type.GetMethod("Invoke"));
+            method = proxyMethod(type.GetMethod("Invoke"));
 
+            lock (_ProxiedDelegates)
+            {
                 _ProxiedDelegates.Add(type, method);
 
                 return method;

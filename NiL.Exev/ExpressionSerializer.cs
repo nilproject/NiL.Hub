@@ -133,6 +133,9 @@ namespace NiL.Exev
                 if (type != constantExpression.Type && value != null) // boxied
                     type = typeof(Nullable<>).MakeGenericType(type);
 
+                if (value == null && type.IsClass) // null value
+                    type = typeof(object);
+
                 addType(result, type);
                 addValue(result, constantExpression.Value, type);
             }
@@ -392,7 +395,7 @@ namespace NiL.Exev
                         break;
                     }
 
-                    throw new NotSupportedException(typeCode.ToString());
+                    throw new NotSupportedException(nestedType.ToString() + " is not supported for serialization");
                 }
 
                 case TypeCode.Empty:

@@ -16,17 +16,34 @@ namespace NiL.Hub
 {
     public partial class Hub : IHub
     {
-        private sealed class _ToArrayTools
+        private sealed class ToArrayTools
         {
             public Func<IList> NewList;
             public Func<IList, object> ToArray;
+        }
+
+        internal sealed class RegisteredStream
+        {
+            public int LastUse { get; private set; } = Environment.TickCount;
+
+            private Stream _stream;
+            public Stream Stream
+            {
+                get
+                {
+                    LastUse = Environment.TickCount;
+                    return _stream;
+                }
+
+                init => _stream = value;
+            }
         }
 
         private uint _interfaceIdCounter;
         private volatile int _callResultAwaitId;
         private volatile int _streamsId;
 
-        private readonly Dictionary<Type, _ToArrayTools> _toArrayTools = new Dictionary<Type, _ToArrayTools>();
+        private readonly Dictionary<Type, ToArrayTools> _toArrayTools = new Dictionary<Type, ToArrayTools>();
 
         internal readonly Dictionary<MemberInfo, bool> _accessCache = new Dictionary<MemberInfo, bool>();
         internal readonly TypesMapLayer _registeredInderfaces = new TypesMapLayer();
@@ -34,12 +51,15 @@ namespace NiL.Hub
         internal readonly Dictionary<IPEndPoint, Thread> _listeners = new Dictionary<IPEndPoint, Thread>();
         internal readonly Dictionary<IPEndPoint, List<HubConnection>> _hubsConnctions = new Dictionary<IPEndPoint, List<HubConnection>>();
         internal readonly Dictionary<long, RemoteHub> _knownHubs = new Dictionary<long, RemoteHub>();
-        internal readonly Dictionary<int, Stream> _streams = new Dictionary<int, Stream>();
+        internal readonly Dictionary<int, RegisteredStream> _streams = new Dictionary<int, RegisteredStream>();
         internal readonly Dictionary<(long, int), TaskCompletionSource<RemoteStream>> _remoteStreams = new Dictionary<(long, int), TaskCompletionSource<RemoteStream>>();
         internal readonly ExpressionEvaluator _expressionEvaluator;
 
         internal readonly ExpressionDeserializer _expressionDeserializer;
         internal readonly Dictionary<int, TaskCompletionSource<object>> _awaiters = new Dictionary<int, TaskCompletionSource<object>>();
+
+        [ThreadStatic]
+        internal static Hub _currentHub;
 
         public IEnumerable<RemoteHub> KnownHubs => _knownHubs.Values;
         public IEnumerable<HubConnection> Connections => _hubsConnctions.Values.SelectMany(x => x);
@@ -345,7 +365,7 @@ namespace NiL.Hub
             lock (_streams)
             {
                 var id = Interlocked.Increment(ref _streamsId);
-                _streams.Add(id, stream);
+                _streams.Add(id, new RegisteredStream { Stream = stream });
                 return id;
             }
         }
@@ -408,7 +428,10 @@ namespace NiL.Hub
 
         private void doEval(long hubId, int awaitId, byte[] code, TaskCompletionSource<object> resultTask)
         {
-            var hub = getRemoteHub(hubId);
+            var remoteHub = getRemoteHub(hubId);
+
+            var oldCurrentHub = _currentHub;
+            _currentHub = this;
 
             try
             {
@@ -421,11 +444,11 @@ namespace NiL.Hub
 
                 void sendResult()
                 {
-                    using var connection = hub._connections.GetLockedConenction();
+                    using var connection = remoteHub._connections.GetLockedConenction();
 
                     connection.Value.WriteRetransmitTo(hubId, c =>
                     {
-                        c.WriteResult(awaitId, hub._expressionSerializer.Serialize(Expression.Constant(result)));
+                        c.WriteResult(awaitId, remoteHub._expressionSerializer.Serialize(Expression.Constant(result)));
                     });
 
                     connection.Value.FlushOutputBuffer();
@@ -454,7 +477,7 @@ namespace NiL.Hub
                                 }
                                 catch (Exception e)
                                 {
-                                    using var connection = hub._connections.GetLockedConenction();
+                                    using var connection = remoteHub._connections.GetLockedConenction();
                                     connection.Value.WriteRetransmitTo(hubId, c => c.WriteException(awaitId, e));
                                     connection.Value.FlushOutputBuffer();
 
@@ -469,7 +492,15 @@ namespace NiL.Hub
                             awaiter.UnsafeOnCompleted(() =>
                             {
                                 result = null;
-                                sendResult();
+
+                                try
+                                {
+                                    sendResult();
+                                }
+                                catch (Exception e)
+                                {
+                                    Console.Error.WriteLine(e);
+                                }
                             });
                         }
                     }
@@ -509,7 +540,7 @@ namespace NiL.Hub
                                     if (!_toArrayTools.TryGetValue(itemType, out var arrayTools))
                                     {
                                         var listPrm = Expression.Parameter(typeof(IList));
-                                        arrayTools = new _ToArrayTools
+                                        arrayTools = new ToArrayTools
                                         {
                                             NewList = Expression.Lambda<Func<IList>>(Expression.New(listType)).Compile(),
                                             ToArray = Expression.Lambda<Func<IList, object>>(
@@ -537,13 +568,17 @@ namespace NiL.Hub
             }
             catch (Exception e)
             {
-                using var connection = hub._connections.GetLockedConenction();
+                using var connection = remoteHub._connections.GetLockedConenction();
                 connection.Value.WriteRetransmitTo(hubId, c => c.WriteException(awaitId, e));
                 connection.Value.FlushOutputBuffer();
 
                 resultTask.SetException(e);
 
                 Console.Error.WriteLine(e.Message);
+            }
+            finally
+            {
+                _currentHub = oldCurrentHub;
             }
         }
 

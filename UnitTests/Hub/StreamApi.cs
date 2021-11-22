@@ -142,5 +142,35 @@ namespace HubUnitTests
 
             Assert.ThrowsException<AggregateException>(() => hub1.GetRemoteStream(hub0.Id, streamId).Wait(), "Unknown stream");
         }
+
+        [TestMethod]
+        public void SetLengthOfRemoteStream()
+        {
+            using var hub0 = new Hub("hub 0");
+            hub0.PathThrough = true;
+            var hub0EndPoint = new IPEndPoint(IPAddress.Loopback, 4500);
+            hub0.StartListening(hub0EndPoint);
+
+            using var hub1 = new Hub("hub 1");
+            hub1.PathThrough = true;
+            var hub1EndPoint = new IPEndPoint(IPAddress.Loopback, 4501);
+            hub1.StartListening(hub1EndPoint);
+
+            hub0.Connect(hub1EndPoint).Wait();
+
+            var stream = new MemoryStream();
+
+            var streamId = hub0.RegisterStream(stream);
+
+            var remoteStreamTask = hub1.GetRemoteStream(hub0.Id, streamId);
+
+            remoteStreamTask.Wait();
+            var remoteStream = remoteStreamTask.Result;
+
+            remoteStream.SetLength(100);
+
+            Assert.AreEqual(100, remoteStream.Length);
+            Assert.AreEqual(100, stream.Length);
+        }
     }
 }

@@ -199,6 +199,10 @@ namespace NiL.Exev
                     case ExpressionType.TypeAs:
                         break;
 
+                    case ExpressionType.Not:
+                        stack.Push(!(bool)stack.Pop());
+                        break;
+
                     default: throw new NotImplementedException(expression.NodeType.ToString());
                 }
             }
@@ -206,25 +210,16 @@ namespace NiL.Exev
             {
                 var type = newArrayExpression.Type;
 
-                if (newArrayExpression.Expressions.Count == 1)
-                {
-                    eval(newArrayExpression.Expressions[0], stack, parameters);
-                    var length = (int)stack.Pop();
+                int itemsCount = newArrayExpression.Expressions.Count;
+                var array = Array.CreateInstance(type.GetElementType(), itemsCount);
 
-                    stack.Push(_MetadataWrappersCache.CreateArray(type, length));
-                }
-                else
+                for (var i = 0; i < itemsCount; i++)
                 {
-                    var lengths = new int[newArrayExpression.Expressions.Count];
-                    for (var i = 0; i < lengths.Length; i++)
-                    {
-                        eval(newArrayExpression.Expressions[i], stack, parameters);
-                        lengths[i] = (int)stack.Pop();
-                    }
-
-                    var array = Array.CreateInstance(type.GetElementType(), lengths);
-                    stack.Push(array);
+                    eval(newArrayExpression.Expressions[i], stack, parameters);
+                    array.SetValue(stack.Pop(), i);
                 }
+
+                stack.Push(array);
             }
             else if (expression is MethodCallExpression callExpression)
             {

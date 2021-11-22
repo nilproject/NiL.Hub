@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -449,7 +450,13 @@ namespace NiL.Hub
                         {
                             if (_localHub._streams.TryGetValue(streamId, out var stream))
                             {
-                                connection.Value.WriteStreamInfo(streamId, stream.Length, stream.Position, stream.CanSeek, stream.CanWrite, stream.CanRead);
+                                connection.Value.WriteStreamInfo(
+                                    streamId,
+                                    stream.Stream.Length,
+                                    stream.Stream.Position,
+                                    stream.Stream.CanSeek,
+                                    stream.Stream.CanWrite,
+                                    stream.Stream.CanRead);
                             }
                             else
                             {
@@ -479,11 +486,11 @@ namespace NiL.Hub
                                 if (remoteStreamTask.Task.IsCompleted)
                                 {
                                     var stream = remoteStreamTask.Task.Result;
-                                    stream.CanRead = (flags & 1) != 0;
-                                    stream.CanWrite = (flags & 2) != 0;
-                                    stream.CanSeek = (flags & 4) != 0;
-                                    stream.Position = position;
-                                    stream.Length = length;
+                                    stream.SetCanRead((flags & 1) != 0);
+                                    stream.SetCanWrite((flags & 2) != 0);
+                                    stream.SetCanSeek((flags & 4) != 0);
+                                    stream.SetPosition(position);
+                                    stream.SetLengthInternal(length);
                                 }
                                 else
                                 {
@@ -533,11 +540,16 @@ namespace NiL.Hub
                             if (_localHub._streams.TryGetValue(streamId, out var stream))
                             {
                                 var buffer = new byte[count];
-                                var r = stream.Read(buffer);
+                                var r = stream.Stream.Read(buffer);
                                 if (r < buffer.Length)
                                     Array.Resize(ref buffer, r);
 
-                                connection.Value.WriteStreamInfo(streamId, stream.Length, stream.Position, stream.CanSeek, stream.CanWrite, stream.CanRead);
+                                connection.Value.WriteStreamInfo(streamId,
+                                    stream.Stream.Length,
+                                    stream.Stream.Position,
+                                    stream.Stream.CanSeek,
+                                    stream.Stream.CanWrite,
+                                    stream.Stream.CanRead);
                                 connection.Value.WriteStreamData(streamId, buffer);
                             }
                             else
@@ -573,6 +585,93 @@ namespace NiL.Hub
                     break;
                 }
 
+                case PackageType.StreamSeek:
+                {
+                    var streamId = _inputBufferReader.ReadInt32();
+                    var offset = _inputBufferReader.ReadInt64();
+                    var origin = (SeekOrigin)_inputBufferReader.ReadByte();
+
+                    doAfter.Add(() =>
+                    {
+                        RemoteHub remoteHub;
+                        lock (_localHub._knownHubs)
+                        {
+                            if (!_localHub._knownHubs.TryGetValue(senderId, out remoteHub))
+                            {
+                                writeError(ErrorCode.UnknownHub, "Unknown hub #" + senderId);
+                                return;
+                            }
+                        }
+
+                        using var connection = remoteHub._connections.GetLockedConenction();
+                        lock (_localHub._streams)
+                        {
+                            if (_localHub._streams.TryGetValue(streamId, out var regStream))
+                            {
+                                var stream = regStream.Stream;
+                                stream.Seek(offset, origin);
+
+                                connection.Value.WriteStreamInfo(
+                                    streamId,
+                                    stream.Length,
+                                    stream.Position,
+                                    stream.CanSeek,
+                                    stream.CanWrite,
+                                    stream.CanRead);
+                                connection.Value.WriteStreamData(streamId, Array.Empty<byte>());
+                            }
+                            else
+                            {
+                                connection.Value.WriteStreamData(streamId, Array.Empty<byte>());
+                            }
+                        }
+
+                        connection.Value.FlushOutputBuffer();
+                    });
+
+                    break;
+                }
+
+                case PackageType.StreamSetLength:
+                {
+                    var streamId = _inputBufferReader.ReadInt32();
+                    var newLength = _inputBufferReader.ReadInt64();
+
+                    doAfter.Add(() =>
+                    {
+                        RemoteHub remoteHub;
+                        lock (_localHub._knownHubs)
+                        {
+                            if (!_localHub._knownHubs.TryGetValue(senderId, out remoteHub))
+                            {
+                                writeError(ErrorCode.UnknownHub, "Unknown hub #" + senderId);
+                                return;
+                            }
+                        }
+
+                        using var connection = remoteHub._connections.GetLockedConenction();
+                        lock (_localHub._streams)
+                        {
+                            if (_localHub._streams.TryGetValue(streamId, out var regStream))
+                            {
+                                var stream = regStream.Stream;
+                                stream.SetLength(newLength);
+
+                                connection.Value.WriteStreamInfo(streamId, stream.Length, stream.Position, stream.CanSeek, stream.CanWrite, stream.CanRead);
+                                connection.Value.WriteStreamData(streamId, Array.Empty<byte>());
+                            }
+                            else
+                            {
+                                connection.Value.WriteStreamData(streamId, Array.Empty<byte>());
+                            }
+                        }
+
+                        connection.Value.FlushOutputBuffer();
+                    });
+
+                    break;
+                }
+
                 case PackageType.StreamWrite:
                 {
                     var streamId = _inputBufferReader.ReadInt32();
@@ -594,8 +693,9 @@ namespace NiL.Hub
                         using var connection = remoteHub._connections.GetLockedConenction();
                         lock (_localHub._streams)
                         {
-                            if (_localHub._streams.TryGetValue(streamId, out var stream))
+                            if (_localHub._streams.TryGetValue(streamId, out var regStream))
                             {
+                                var stream = regStream.Stream;
                                 stream.Write(data);
 
                                 connection.Value.WriteStreamInfo(streamId, stream.Length, stream.Position, stream.CanSeek, stream.CanWrite, stream.CanRead);
@@ -621,10 +721,10 @@ namespace NiL.Hub
                     {
                         if (_localHub._streams.TryGetValue(streamId, out var stream))
                         {
-                            stream.Close();
-                        }
+                            stream.Stream.Close();
 
-                        _localHub._streams.Remove(streamId);
+                            _localHub._streams.Remove(streamId);
+                        }
                     }
 
                     break;
@@ -1002,6 +1102,25 @@ namespace NiL.Hub
             _outputBufferWritter.Write(streamId);
             _outputBufferWritter.Write((ushort)data.Count);
             _outputBufferWritter.Write(data);
+        }
+
+        internal void WriteStreamSeek(int streamId, long offset, SeekOrigin origin)
+        {
+            Debug.Assert(Monitor.IsEntered(_sync));
+
+            _outputBufferWritter.Write((byte)PackageType.StreamSeek);
+            _outputBufferWritter.Write(streamId);
+            _outputBufferWritter.Write((long)offset);
+            _outputBufferWritter.Write((byte)origin);
+        }
+
+        internal void WriteStreamSetLength(int streamId, long newLength)
+        {
+            Debug.Assert(Monitor.IsEntered(_sync));
+
+            _outputBufferWritter.Write((byte)PackageType.StreamSetLength);
+            _outputBufferWritter.Write(streamId);
+            _outputBufferWritter.Write((ulong)newLength);
         }
 
         internal void WriteStreamClose(int streamId)
