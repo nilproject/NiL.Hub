@@ -1,5 +1,6 @@
 ﻿using System;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace NiL.Hub
@@ -72,7 +73,60 @@ namespace NiL.Hub
             base.Close();
         }
 
-        public Task<byte[]> Read(ushort length)
+        public override int ReadByte()
+        {
+            var data = Read(1).GetAwaiter().GetResult();
+
+            return data[0];
+        }
+
+        public override int Read(Span<byte> buffer)
+        {
+            var data = Read((ushort)buffer.Length).GetAwaiter().GetResult();
+
+            for (var i = 0; i < data.Length; i++)
+            {
+                buffer[i] = data[i];
+            }
+
+            return data.Length;
+        }
+
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            if (buffer.Length > ushort.MaxValue)
+                throw new ArgumentOutOfRangeException(nameof(buffer.Length));
+
+            return new ValueTask<int>(Read((ushort)buffer.Length).ContinueWith(data =>
+            {
+                for (var i = 0; i < data.Result.Length; i++)
+                {
+                    buffer.Span[i] = data.Result[i];
+                }
+
+                return data.Result.Length;
+            }));
+        }
+
+        public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+        {
+            if (count > ushort.MaxValue || count < 0)
+                throw new ArgumentOutOfRangeException(nameof(count));
+
+            if (offset < 0)
+                throw new ArgumentOutOfRangeException(nameof(offset));
+
+            if (buffer.Length < offset + count)
+                throw new ArgumentOutOfRangeException($"{offset} + {count}");
+
+            return Read((ushort)count).ContinueWith(x =>
+            {
+                x.Result.CopyTo(buffer, offset);
+                return x.Result.Length;
+            });
+        }
+
+        public Task<byte[]> Read(ushort count)
         {
             if (Closed)
                 throw new InvalidOperationException("Stream closed");
@@ -85,7 +139,7 @@ namespace NiL.Hub
                 using var connection = _remoteHub._connections.GetLockedConenction();
                 connection.Value.WriteRetransmitTo(_remoteHub.Id, x =>
                 {
-                    x.WriteStreamRead(_streamId, length);
+                    x.WriteStreamRead(_streamId, count);
                 });
 
                 connection.Value.FlushOutputBuffer();
@@ -95,7 +149,12 @@ namespace NiL.Hub
             }
         }
 
-        public Task Write(ArraySegment<byte> data)
+        public override void Write(ReadOnlySpan<byte> buffer)
+        {
+            WriteAsync(buffer.ToArray()).GetAwaiter().GetResult();
+        }
+
+        public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
         {
             if (Closed)
                 throw new InvalidOperationException("Stream closed");
@@ -111,14 +170,19 @@ namespace NiL.Hub
                 using var connection = _remoteHub._connections.GetLockedConenction();
                 connection.Value.WriteRetransmitTo(_remoteHub.Id, x =>
                 {
-                    x.WriteStreamWrite(_streamId, data);
+                    x.WriteStreamWrite(_streamId, buffer.Span);
                 });
 
                 connection.Value.FlushOutputBuffer();
 
                 _awaiter = new TaskCompletionSource<byte[]>();
-                return _awaiter.Task;
+                return new ValueTask(_awaiter.Task);
             }
+        }
+
+        public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+        {
+            return WriteAsync(new ArraySegment<byte>(buffer, offset, count), cancellationToken).AsTask();
         }
 
         internal void ReceiveData(byte[] data)
@@ -155,7 +219,7 @@ namespace NiL.Hub
                 .GetAwaiter()
                 .GetResult();
 
-            Array.Copy(bytes, 0, buffer, offset, count);
+            Array.Copy(bytes, 0, buffer, offset, bytes.Length);
             return bytes.Length;
         }
 
@@ -214,7 +278,7 @@ namespace NiL.Hub
 
         public override void Write(byte[] buffer, int offset, int count)
         {
-            Write(new ArraySegment<byte>(buffer, offset, count)).Wait();
+            WriteAsync(buffer, offset, count).Wait();
         }
 
         internal void SetCanRead(bool v)

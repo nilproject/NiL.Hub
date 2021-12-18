@@ -246,8 +246,8 @@ namespace NiL.Exev
                     var type = getType(data, ref index);
                     var value = getValue(data, ref index, type);
 
-                    if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>))
-                        type = typeof(object);
+                    //if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>))
+                    //    type = typeof(object);
 
                     return Expression.Constant(value, type);
                 }
@@ -518,14 +518,34 @@ namespace NiL.Exev
 
                 case TypeCode.Object:
                 {
-                    if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>))
-                        return getValue(data, ref index, type.GetGenericArguments()[0]);
-
                     if (type == typeof(object))
                     {
                         var nestedType = getType(data, ref index);
                         return getValue(data, ref index, nestedType);
                     }
+
+                    if (type.IsValueType)
+                    {
+                        var members = _MetadataWrappersCache.GetMembers(type);
+                        var result = Activator.CreateInstance(type);
+                        for (var i = 0; i < members.Length; i++)
+                        {
+                            if (members[i] is FieldInfo field)
+                            {
+                                field.SetValue(result, getValue(data, ref index, field.FieldType));
+                            }
+                        }
+
+                        return result;
+                    }
+
+                    if (typeof(Type).IsAssignableFrom(type))
+                    {
+                        return Type.GetType(getString(data, ref index));
+                    }
+
+                    if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>))
+                        return getValue(data, ref index, type.GetGenericArguments()[0]);
 
                     throw new NotSupportedException(type.ToString());
                 }

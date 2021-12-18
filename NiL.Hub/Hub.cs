@@ -373,25 +373,44 @@ namespace NiL.Hub
         public Task<RemoteStream> GetRemoteStream(long hubId, int streamId)
         {
             TaskCompletionSource<RemoteStream> remoteStream;
-            lock (_remoteStreams)
+            var key = (hubId, streamId);
+            try
             {
-                if (_remoteStreams.TryGetValue((hubId, streamId), out remoteStream))
-                    return remoteStream.Task;
+                if (!_knownHubs.TryGetValue(hubId, out var hub))
+                    throw new InvalidOperationException("Hub " + hubId + " is unknown");
 
-                remoteStream = new TaskCompletionSource<RemoteStream>();
-                _remoteStreams[(hubId, streamId)] = remoteStream;
+                lock (_remoteStreams)
+                {
+                    if (_remoteStreams.TryGetValue((hubId, streamId), out remoteStream))
+                        return remoteStream.Task;
+
+                    remoteStream = new TaskCompletionSource<RemoteStream>();
+                    _remoteStreams[key] = remoteStream;
+                }
+
+                using var connection = hub._connections.GetLockedConenction();
+                connection.Value.WriteRetransmitTo(hubId, x =>
+                {
+                    x.WriteStreamGetInfo(streamId);
+                });
+
+                connection.Value.FlushOutputBuffer();
+
+                return remoteStream.Task;
             }
-
-            var hub = _knownHubs[hubId];
-            using var connection = hub._connections.GetLockedConenction();
-            connection.Value.WriteRetransmitTo(hubId, x =>
+            catch
             {
-                x.WriteStreamGetInfo(streamId);
-            });
+                _remoteStreams.Remove(key);
+                throw;
+            }
+        }
 
-            connection.Value.FlushOutputBuffer();
-
-            return remoteStream.Task;
+        public bool UnregisterStream(int streamId)
+        {
+            lock (_streams)
+            {
+                return _streams.Remove(streamId);
+            }
         }
 
         internal TaskCompletionSource<object> AllocTaskCompletionSource(out int taskAwaitId)

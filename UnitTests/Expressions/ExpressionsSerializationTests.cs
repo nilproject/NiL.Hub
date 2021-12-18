@@ -410,12 +410,7 @@ namespace UnitTests.Expressions
         [TestMethod]
         public void GenericParametrization()
         {
-            Expression<Func<int>> lambda = () => MyCustomType.GetValue<int>(777);
-
-            //var typeMap = new TypesMapLayer
-            //{
-            //    { typeof(MyCustomType), 333 }
-            //};
+            Expression<Func<int>> lambda = () => MyCustomType.GetValue(777);
 
             var serializer = new ExpressionSerializer();
             var deserializer = new ExpressionDeserializer();
@@ -425,6 +420,23 @@ namespace UnitTests.Expressions
 
             Assert.IsInstanceOfType(deserialized, lambda.GetType());
             Assert.AreEqual(lambda.ToString(), deserialized.ToString());
+        }
+
+        [TestMethod]
+        public void ValueTuples()
+        {
+            Expression<Func<(int, string)>> expression = () => new ValueTuple<int, string>(1, "23");
+
+            checkSerialization(expression.Body);
+        }
+
+        [TestMethod]
+        public void ValueTuplesAsObject()
+        {
+            //var tuple = (1, "23");
+            Expression<Func<object>> expression = () => Convert.ChangeType(new ValueTuple<int, string>(1, "23"), typeof(ValueTuple));
+
+            checkSerialization(expression.Body);
         }
 
         private static void checkSerialization(ConstantExpression expression)

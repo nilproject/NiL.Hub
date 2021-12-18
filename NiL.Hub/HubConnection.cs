@@ -234,7 +234,7 @@ namespace NiL.Hub
                     }
                     catch (SocketException)
                     {
-                        Console.Error.WriteLine("Unable to connect to " + IPEndPoint);
+                        Console.Error.WriteLine("Unable to reconnect to " + IPEndPoint);
                     }
                 }
                 else

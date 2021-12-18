@@ -17,7 +17,7 @@ namespace NiL.Exev
         private static readonly Dictionary<MemberInfo, Func<Stack<object>, object>> _ProxiedMembersSetters = new Dictionary<MemberInfo, Func<Stack<object>, object>>();
         private static readonly Dictionary<Type, Func<Stack<object>, object>> _ProxiedDelegates = new Dictionary<Type, Func<Stack<object>, object>>();
         private static readonly Dictionary<Type, MethodInfo[]> _TypeMethods = new Dictionary<Type, MethodInfo[]>();
-        private static readonly Dictionary<(Type, string), MemberInfo> _TypeMembers = new Dictionary<(Type, string), MemberInfo>();
+        private static readonly Dictionary<Type, MemberInfo[]> _TypeMembers = new Dictionary<Type, MemberInfo[]>();
 
         internal static MethodInfo[] GetMethods(Type type)
         {
@@ -185,14 +185,26 @@ namespace NiL.Exev
 
         internal static MemberInfo GetMember(Type type, string memberName)
         {
-            if (_TypeMembers.TryGetValue((type, memberName), out var memberInfo))
-                return memberInfo;
+            if (!_TypeMembers.TryGetValue(type, out var members))
+            {
+                members = type.GetMembers();
+                if (members != null)
+                    _TypeMembers[type] = members;
+            }
 
-            memberInfo = type.GetMember(memberName).SingleOrDefault();
-            if (memberInfo != null)
-                _TypeMembers[(type, memberName)] = memberInfo;
+            return members.FirstOrDefault(x => x.Name == memberName);
+        }
 
-            return memberInfo;
+        internal static MemberInfo[] GetMembers(Type type)
+        {
+            if (!_TypeMembers.TryGetValue(type, out var members))
+            {
+                members = type.GetMembers(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+                if (members != null)
+                    _TypeMembers[type] = members;
+            }
+
+            return members;
         }
     }
 }

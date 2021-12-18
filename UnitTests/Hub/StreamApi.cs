@@ -101,14 +101,14 @@ namespace HubUnitTests
             remoteStreamTask.Wait();
             var remoteStream = remoteStreamTask.Result;
 
-            var writeTask = remoteStream.Write(Encoding.UTF8.GetBytes("Hello"));
-            writeTask.Wait();
+            var writeTask = remoteStream.WriteAsync(Encoding.UTF8.GetBytes("Hello"));
+            writeTask.GetAwaiter().GetResult();
 
             Assert.AreEqual("Hello", Encoding.UTF8.GetString(stream.GetBuffer(), 0, 5));
             Assert.AreEqual(5, remoteStream.Position);
 
-            writeTask = remoteStream.Write(Encoding.UTF8.GetBytes(", world!"));
-            writeTask.Wait();
+            writeTask = remoteStream.WriteAsync(Encoding.UTF8.GetBytes(", world!"));
+            writeTask.GetAwaiter().GetResult();
 
             Assert.AreEqual("Hello, world!", Encoding.UTF8.GetString(stream.GetBuffer(), 0, 13));
             Assert.AreEqual(13, remoteStream.Position);

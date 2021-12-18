@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Net;
 using System.Threading.Tasks;
 
@@ -27,5 +28,11 @@ namespace NiL.Hub
 
         IEnumerable<RemoteHub> KnownHubs { get; }
         IEnumerable<HubConnection> Connections { get; }
+
+        int RegisterStream(Stream stream);
+
+        Task<RemoteStream> GetRemoteStream(long hubId, int streamId);
+
+        bool UnregisterStream(int streamId);
     }
 }

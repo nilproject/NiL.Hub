@@ -1,4 +1,5 @@
-﻿using System.Linq.Expressions;
+﻿using System;
+using System.Linq.Expressions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NiL.Exev;
 
@@ -67,6 +68,30 @@ namespace UnitTests.Expressions.ExpressionsEvaluation
             Assert.IsInstanceOfType(result, typeof(int[,]));
             Assert.AreEqual(2, ((int[,])result).GetLength(0));
             Assert.AreEqual(3, ((int[,])result).GetLength(1));
+        }
+
+        [TestMethod]
+        public void NewArrayInit_1elem()
+        {
+            var evaluator = new ExpressionEvaluator();
+            var exp = Expression.NewArrayInit(typeof(int), Expression.Constant(2));
+
+            var result = evaluator.Eval(exp);
+
+            Assert.IsInstanceOfType(result, typeof(int[]));
+            Assert.AreEqual(1, ((int[])result).GetLength(0));
+        }
+
+        [TestMethod]
+        public void NewArrayInit_2elem()
+        {
+            var evaluator = new ExpressionEvaluator();
+            var exp = Expression.NewArrayInit(typeof(int), Expression.Constant(2), Expression.Constant(3));
+
+            var result = evaluator.Eval(exp);
+
+            Assert.IsInstanceOfType(result, typeof(int[]));
+            Assert.AreEqual(2, ((int[])result).GetLength(0));
         }
     }
 }

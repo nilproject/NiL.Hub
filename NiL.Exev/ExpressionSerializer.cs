@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq.Expressions;
+using System.Reflection;
 
 namespace NiL.Exev
 {
@@ -130,14 +131,8 @@ namespace NiL.Exev
                 var value = constantExpression.Value;
                 var type = constantExpression.Type;
 
-                if (type != constantExpression.Type && value != null) // boxied
-                    type = typeof(Nullable<>).MakeGenericType(type);
-
-                if (value == null && type.IsClass) // null value
-                    type = typeof(object);
-
                 addType(result, type);
-                addValue(result, constantExpression.Value, type);
+                addValue(result, value, type);
             }
             else if (expression is MethodCallExpression callExpression)
             {
@@ -271,9 +266,9 @@ namespace NiL.Exev
             }
 
             if (source == null) // static field
-                return Expression.Constant(_expressionEvaluator.Eval(expression));
+                return Expression.Constant(_expressionEvaluator.Eval(expression), expression.Type);
             else if (source.NodeType == ExpressionType.Constant)
-                return Expression.Constant(_expressionEvaluator.Eval(expression));
+                return Expression.Constant(_expressionEvaluator.Eval(expression), expression.Type);
 
             return null;
         }
@@ -354,7 +349,7 @@ namespace NiL.Exev
                     break;
 
                 case TypeCode.String:
-                    addString(result, value.ToString());
+                    addString(result, value?.ToString());
                     break;
 
                 case TypeCode.DateTime:
@@ -385,17 +380,40 @@ namespace NiL.Exev
                         break;
                     }
 
-                    Type nestedType = value.GetType();
-                    if (nestedType.IsPrimitive
-                        || nestedType.IsArray
-                        || value is string)
+                    if (value is Type valueAsType)
                     {
-                        addType(result, nestedType);
-                        addValue(result, value, nestedType);
+                        addString(result, valueAsType.AssemblyQualifiedName);
                         break;
                     }
 
-                    throw new NotSupportedException(nestedType.ToString() + " is not supported for serialization");
+                    Type valueType = value.GetType();
+
+                    if (type == typeof(object))
+                        addType(result, valueType);
+
+                    if (valueType.IsPrimitive
+                        || valueType.IsArray
+                        || value is string)
+                    {
+                        addValue(result, value, valueType);
+                        break;
+                    }
+
+                    if (valueType.IsValueType)
+                    {
+                        var members = _MetadataWrappersCache.GetMembers(valueType);
+                        for (var i = 0; i < members.Length; i++)
+                        {
+                            if (members[i] is FieldInfo field)
+                            {
+                                addValue(result, field.GetValue(value), field.FieldType);
+                            }
+                        }
+
+                        break;
+                    }
+
+                    throw new NotSupportedException(valueType.ToString() + " is not supported for serialization");
                 }
 
                 case TypeCode.Empty:
@@ -472,6 +490,12 @@ namespace NiL.Exev
 
         private void addString(List<byte> result, string value)
         {
+            if (value == null)
+                addInt16(result, -1);
+
+            if (value.Length > short.MaxValue)
+                throw new ArgumentOutOfRangeException("String is too long");
+
             addInt16(result, (short)value.Length);
             for (var i = 0; i < value.Length; i++)
             {

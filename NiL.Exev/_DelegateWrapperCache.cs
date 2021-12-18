@@ -51,7 +51,10 @@ namespace NiL.Exev
             }
 
             var evalCall = Expression.Call(evalPrm, _EvalMethod, Expression.PropertyOrField(exprPrm, nameof(expression.Body)), innerPrmsPrm);
-            innerBody.Add(Expression.Convert(evalCall, expression.ReturnType));
+            if (expression.ReturnType == typeof(void))
+                innerBody.Add(Expression.Block(evalCall, Expression.Constant(null)));
+            else
+                innerBody.Add(Expression.Convert(evalCall, expression.ReturnType));
 
             var innerLambda = Expression.Lambda(expression.Type, Expression.Block(innerBody), prms);
 

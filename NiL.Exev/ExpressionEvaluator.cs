@@ -211,15 +211,33 @@ namespace NiL.Exev
                 var type = newArrayExpression.Type;
 
                 int itemsCount = newArrayExpression.Expressions.Count;
-                var array = Array.CreateInstance(type.GetElementType(), itemsCount);
 
-                for (var i = 0; i < itemsCount; i++)
+                if (newArrayExpression.NodeType == ExpressionType.NewArrayBounds)
                 {
-                    eval(newArrayExpression.Expressions[i], stack, parameters);
-                    array.SetValue(stack.Pop(), i);
-                }
+                    var lengths = new int[itemsCount];
 
-                stack.Push(array);
+                    for (var i = 0; i < itemsCount; i++)
+                    {
+                        eval(newArrayExpression.Expressions[i], stack, parameters);
+                        lengths[i] = (int)stack.Pop();
+                    }
+
+                    var array = Array.CreateInstance(type.GetElementType(), lengths);
+
+                    stack.Push(array);
+                }
+                else
+                {
+                    var array = (Array)Activator.CreateInstance(type, itemsCount);
+
+                    for (var i = 0; i < itemsCount; i++)
+                    {
+                        eval(newArrayExpression.Expressions[i], stack, parameters);
+                        array.SetValue(stack.Pop(), i);
+                    }
+
+                    stack.Push(array);
+                }
             }
             else if (expression is MethodCallExpression callExpression)
             {
@@ -471,6 +489,18 @@ namespace NiL.Exev
 
                         default: throw new NotImplementedException("MemberAccess for " + memberExpression.Member.GetType().Name);
                     }
+                }
+
+                case ExpressionType.ArrayIndex when expression is BinaryExpression binaryExpression:
+                {
+                    eval(binaryExpression.Left, stack, parameters);
+                    var array = (Array)stack.Pop();
+
+                    eval(binaryExpression.Right, stack, parameters);
+                    var index = (int)stack.Pop();
+
+                    stack.Push(array.GetValue(index));
+                    break;
                 }
 
                 default: throw new NotImplementedException("rvalue for " + expression.NodeType);
