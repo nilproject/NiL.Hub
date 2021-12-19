@@ -21,13 +21,16 @@ namespace NiL.Exev
 
         internal static MethodInfo[] GetMethods(Type type)
         {
-            if (_TypeMethods.TryGetValue(type, out var result))
+            lock (_TypeMethods)
+            {
+                if (_TypeMethods.TryGetValue(type, out var result))
+                    return result;
+
+                _TypeMethods[type] = result = type.GetMethods();
+                Array.Sort(result, (x, y) => string.CompareOrdinal(x.Name, y.Name));
+
                 return result;
-
-            _TypeMethods[type] = result = type.GetMethods();
-            Array.Sort(result, (x, y) => string.CompareOrdinal(x.Name, y.Name));
-
-            return result;
+            }
         }
 
         internal static Array CreateArray(Type type, int length)
@@ -185,26 +188,32 @@ namespace NiL.Exev
 
         internal static MemberInfo GetMember(Type type, string memberName)
         {
-            if (!_TypeMembers.TryGetValue(type, out var members))
+            lock (_TypeMembers)
             {
-                members = type.GetMembers();
-                if (members != null)
-                    _TypeMembers[type] = members;
-            }
+                if (!_TypeMembers.TryGetValue(type, out var members))
+                {
+                    members = type.GetMembers();
+                    if (members != null)
+                        _TypeMembers[type] = members;
+                }
 
-            return members.FirstOrDefault(x => x.Name == memberName);
+                return members.FirstOrDefault(x => x.Name == memberName);
+            }
         }
 
         internal static MemberInfo[] GetMembers(Type type)
         {
-            if (!_TypeMembers.TryGetValue(type, out var members))
+            lock (_TypeMembers)
             {
-                members = type.GetMembers(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
-                if (members != null)
-                    _TypeMembers[type] = members;
-            }
+                if (!_TypeMembers.TryGetValue(type, out var members))
+                {
+                    members = type.GetMembers(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+                    if (members != null)
+                        _TypeMembers[type] = members;
+                }
 
-            return members;
+                return members;
+            }
         }
     }
 }

@@ -42,9 +42,9 @@ namespace NiL.Hub
 
         public Locked<HubConnection> GetLockedConenction()
         {
+            HubConnection any = null;
             lock (_distancesByConnections)
             {
-                HubConnection any = null;
                 for (var i = 0; i < _connectionsByDistance.Count; i++)
                 {
                     var connections = _connectionsByDistance[i];
@@ -77,9 +77,9 @@ namespace NiL.Hub
                         }
                     }
                 }
-
-                return any?.GetLocked();
             }
+
+            return any?.GetLocked();
         }
 
         public int GetShortedDistance()

@@ -492,9 +492,15 @@ namespace NiL.Hub
                     var position = _inputBufferReader.ReadInt64();
                     var flags = _inputBufferReader.ReadByte();
 
+                    TaskCompletionSource<RemoteStream> remoteStreamTask;
                     lock (_localHub._remoteStreams)
                     {
-                        if (_localHub._remoteStreams.TryGetValue((senderId, streamId), out var remoteStreamTask))
+                        _localHub._remoteStreams.TryGetValue((senderId, streamId), out remoteStreamTask);
+                    }
+
+                    doAfter.Add(() =>
+                    {
+                        if (remoteStreamTask != null)
                         {
                             if ((flags & 3) != 0)
                             {
@@ -527,7 +533,7 @@ namespace NiL.Hub
                                 remoteStreamTask.SetException(new KeyNotFoundException("Unknown stream"));
                             }
                         }
-                    }
+                    });
 
                     break;
                 }
@@ -556,8 +562,6 @@ namespace NiL.Hub
                             {
                                 var buffer = new byte[count];
                                 var r = stream.Stream.Read(buffer);
-                                if (r < buffer.Length)
-                                    Array.Resize(ref buffer, r);
 
                                 connection.Value.WriteRetransmitTo(
                                            senderId,
@@ -569,7 +573,7 @@ namespace NiL.Hub
                                                                         stream.Stream.CanSeek,
                                                                         stream.Stream.CanWrite,
                                                                         stream.Stream.CanRead);
-                                               connection.Value.WriteStreamData(streamId, buffer);
+                                               connection.Value.WriteStreamData(streamId, new Span<byte>(buffer, 0, r));
                                            });
                             }
                             else
@@ -595,16 +599,16 @@ namespace NiL.Hub
                     var count = _inputBufferReader.ReadUInt16();
                     var data = _inputBufferReader.ReadBytes(count);
 
+                    TaskCompletionSource<RemoteStream> remoteStreamTask;
                     lock (_localHub._remoteStreams)
                     {
-                        if (_localHub._remoteStreams.TryGetValue((senderId, streamId), out var remoteStreamTask))
-                        {
-                            if (remoteStreamTask.Task.IsCompleted)
-                            {
-                                var stream = remoteStreamTask.Task.Result;
-                                stream.ReceiveData(data);
-                            }
-                        }
+                        _localHub._remoteStreams.TryGetValue((senderId, streamId), out remoteStreamTask);
+                    }
+
+                    if (remoteStreamTask != null && remoteStreamTask.Task.IsCompleted)
+                    {
+                        var stream = remoteStreamTask.Task.Result;
+                        stream.ReceiveData(data);
                     }
 
                     break;
@@ -1199,7 +1203,7 @@ namespace NiL.Hub
             _outputBufferWritter.Write(streamId);
         }
 
-        private void WriteStreamData(int streamId, byte[] buffer)
+        private void WriteStreamData(int streamId, Span<byte> buffer)
         {
             Debug.Assert(Monitor.IsEntered(_sync));
 

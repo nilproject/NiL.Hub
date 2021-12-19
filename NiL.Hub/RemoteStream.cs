@@ -64,7 +64,8 @@ namespace NiL.Hub
 
             Closed = true;
 
-            _localHub._remoteStreams.Remove((_remoteHub.Id, _streamId));
+            lock (_localHub._remoteStreams)
+                _localHub._remoteStreams.Remove((_remoteHub.Id, _streamId));
 
             using var connection = _remoteHub._connections.GetLockedConenction();
             connection.Value.WriteStreamClose(_streamId);
@@ -119,10 +120,14 @@ namespace NiL.Hub
             if (buffer.Length < offset + count)
                 throw new ArgumentOutOfRangeException($"{offset} + {count}");
 
-            return Read((ushort)count).ContinueWith(x =>
+            return Read((ushort)count).ContinueWith(data =>
             {
-                x.Result.CopyTo(buffer, offset);
-                return x.Result.Length;
+                for (var i = 0; i < data.Result.Length; i++)
+                {
+                    buffer[i + offset] = data.Result[i];
+                }
+
+                return data.Result.Length;
             });
         }
 
@@ -131,16 +136,24 @@ namespace NiL.Hub
             if (Closed)
                 throw new InvalidOperationException("Stream closed");
 
+            using var connection = _remoteHub._connections.GetLockedConenction();
+
             lock (_sync)
             {
                 if (_awaiter != null)
                     throw new InvalidOperationException("Stream already in awaiting state");
 
-                using var connection = _remoteHub._connections.GetLockedConenction();
-                connection.Value.WriteRetransmitTo(_remoteHub.Id, x =>
+                if (_remoteHub.Id == connection.Value.RemoteHub.Id)
                 {
-                    x.WriteStreamRead(_streamId, count);
-                });
+                    connection.Value.WriteStreamRead(_streamId, count);
+                }
+                else
+                {
+                    connection.Value.WriteRetransmitTo(_remoteHub.Id, x =>
+                    {
+                        x.WriteStreamRead(_streamId, count);
+                    });
+                }
 
                 connection.Value.FlushOutputBuffer();
 
@@ -187,14 +200,15 @@ namespace NiL.Hub
 
         internal void ReceiveData(byte[] data)
         {
-            try
-            {
-                _awaiter?.SetResult(data);
-            }
-            finally
-            {
-                _awaiter = null;
-            }
+            lock (_sync)
+                try
+                {
+                    _awaiter?.SetResult(data);
+                }
+                finally
+                {
+                    _awaiter = null;
+                }
         }
 
         public override void Flush()

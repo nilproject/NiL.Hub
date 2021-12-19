@@ -433,7 +433,6 @@ namespace UnitTests.Expressions
         [TestMethod]
         public void ValueTuplesAsObject()
         {
-            //var tuple = (1, "23");
             Expression<Func<object>> expression = () => Convert.ChangeType(new ValueTuple<int, string>(1, "23"), typeof(ValueTuple));
 
             checkSerialization(expression.Body);

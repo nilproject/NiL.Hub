@@ -321,10 +321,12 @@ namespace NiL.Hub
             return Task.Run(() =>
             {
                 var interfaceName = typeof(TInterface).FullName;
-                var interfaceId = ++_interfaceIdCounter;
+                uint interfaceId;
 
                 lock (_knownInterfaces)
                 {
+                    interfaceId = ++_interfaceIdCounter;
+
                     if (_knownInterfaces.TryGetValue(interfaceName, out var knownInterface))
                     {
                         if (knownInterface.LocalImplementation != null)
@@ -343,11 +345,14 @@ namespace NiL.Hub
                     _registeredInderfaces.Add(typeof(TInterface), interfaceId);
                 }
 
-                foreach (var connections in _hubsConnctions)
+                lock (_hubsConnctions)
                 {
-                    using var connection = connections.Value[0].GetLocked();
-                    connection.Value.WriteRegisterInterface(Id, interfaceName, interfaceId, version);
-                    connection.Value.FlushOutputBuffer();
+                    foreach (var connections in _hubsConnctions)
+                    {
+                        using var connection = connections.Value[0].GetLocked();
+                        connection.Value.WriteRegisterInterface(Id, interfaceName, interfaceId, version);
+                        connection.Value.FlushOutputBuffer();
+                    }
                 }
             });
         }
@@ -400,7 +405,8 @@ namespace NiL.Hub
             }
             catch
             {
-                _remoteStreams.Remove(key);
+                lock (_remoteStreams)
+                    _remoteStreams.Remove(key);
                 throw;
             }
         }

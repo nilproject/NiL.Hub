@@ -22,6 +22,9 @@ namespace NiL.Hub
             var hub = Hub._currentHub;
             return stream.ContinueWith(x =>
             {
+                if (x.Result == null)
+                    return string.Empty;
+
                 var streamId = hub.RegisterStream(x.Result);
                 return streamId + "@" + hub.Id;
             });
