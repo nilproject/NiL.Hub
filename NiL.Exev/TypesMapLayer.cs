@@ -72,6 +72,18 @@ namespace NiL.Exev
                 if (_idToType.ContainsKey(id))
                     throw new ArgumentException("Id " + id + " already added to collection");
 
+                if (!TryAdd(type, id))
+                    throw new ArgumentException("Unable to add to collection");
+            }
+        }
+
+        public bool TryAdd(Type type, uint id)
+        {
+            lock (_sync)
+            {
+                if (_idToType.ContainsKey(id) || _typeToId.ContainsKey(type))
+                    return false;
+
                 _idToType.Add(id, type);
 
                 try
@@ -81,8 +93,10 @@ namespace NiL.Exev
                 catch
                 {
                     _idToType.Remove(id);
-                    throw;
+                    return false;
                 }
+
+                return true;
             }
         }
 

@@ -541,7 +541,7 @@ namespace NiL.Hub
                 case PackageType.StreamRead:
                 {
                     var streamId = _inputBufferReader.ReadInt32();
-                    var count = _inputBufferReader.ReadUInt16();
+                    var count = Math.Min((ushort)30000, _inputBufferReader.ReadUInt16());
 
                     doAfter.Add(() =>
                     {

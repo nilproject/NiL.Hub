@@ -163,7 +163,8 @@ namespace NiL.Exev
 
             lock (_ProxiedDelegates)
             {
-                _ProxiedDelegates.Add(type, method);
+                if (!_ProxiedDelegates.ContainsKey(type))
+                    _ProxiedDelegates.Add(type, method);
 
                 return method;
             }

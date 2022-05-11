@@ -63,15 +63,7 @@ namespace NiL.Hub
                     }
                 }
 
-                if (!hub.Hub._typesMap.HasOwn(typeof(IInterface)))
-                {
-                    try
-                    {
-                        hub.Hub._typesMap.Add(typeof(IInterface), hub.InterfaceId);
-                    }
-                    catch (ArgumentException)
-                    { }
-                }
+                hub.Hub._typesMap.TryAdd(typeof(IInterface), hub.InterfaceId);
 
                 var taskSource = _hub.AllocTaskCompletionSource(out var taskAwaitId);
 

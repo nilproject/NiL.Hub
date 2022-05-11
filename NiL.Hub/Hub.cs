@@ -389,7 +389,7 @@ namespace NiL.Hub
                     if (_remoteStreams.TryGetValue((hubId, streamId), out remoteStream))
                         return remoteStream.Task;
 
-                    remoteStream = new TaskCompletionSource<RemoteStream>();
+                    remoteStream = new TaskCompletionSource<RemoteStream>(TaskCreationOptions.RunContinuationsAsynchronously);
                     _remoteStreams[key] = remoteStream;
                 }
 
@@ -421,7 +421,7 @@ namespace NiL.Hub
 
         internal TaskCompletionSource<object> AllocTaskCompletionSource(out int taskAwaitId)
         {
-            var taskCompletionSource = new TaskCompletionSource<object>();
+            var taskCompletionSource = new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
 
             lock (_awaiters)
             {
