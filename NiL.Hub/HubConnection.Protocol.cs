@@ -12,7 +12,22 @@ namespace NiL.Hub
 {
     public sealed partial class HubConnection // Protocol
     {
-        private void processReceived(List<Action> doAfter, long senderId, int packageSize)
+        public void ProcessReceived(List<Action> doAfter)
+        {
+            lock (_sync)
+            {
+                _lastActivityTimestamp = DateTime.Now.Ticks;
+
+                processReceivedInner(doAfter, RemoteHub == null ? -1 : RemoteHub.Id, (int)_inputBuffer.Length - sizeof(ushort));
+
+                _inputBuffer.SetLength(0);
+
+                if (_outputBuffer.Length != 0)
+                    FlushOutputBuffer();
+            }
+        }
+
+        private void processReceivedInner(List<Action> doAfter, long senderId, int packageSize)
         {
             Debug.Assert(Monitor.IsEntered(_sync));
 
@@ -47,24 +62,19 @@ namespace NiL.Hub
             var packageType = (PackageType)_inputBufferReader.ReadByte();
             switch (packageType)
             {
-                case PackageType.ReadyForDisconnect:
+                case PackageType.ReadyForDisconnect when State == HubConnectionState.Disconnecting:
                 {
-                    if (State == HubConnectionState.Disconnecting)
-                    {
-                        _reconnectOnFail = false;
+                    //_reconnectOnFail = false;
 
-                        doAfter.Add(onDisconnected);
+                    doAfter.Add(onDisconnected);
 
-                        return;
-                    }
-
-                    break;
+                    return;
                 }
+
+                case PackageType.ReadyForDisconnect: break;
 
                 case PackageType.Disconnect:
                 {
-                    _reconnectOnFail = false;
-
                     State = HubConnectionState.Disconnecting;
                     doAfter.Add(onDisconnected);
 
@@ -116,7 +126,7 @@ namespace NiL.Hub
                                 forAllHubConnections(false, hubConn => // only those that are connected directly 
                                 {
                                     hubConn.writeRegisterHub(RemoteHub);
-                                    return true;
+                                    hubConn.FlushOutputBuffer();
                                 });
                             });
                         }
@@ -133,7 +143,7 @@ namespace NiL.Hub
                                         if (!localReg && !_localHub.PathThrough)
                                             continue;
 
-                                        var count = !_localHub.PathThrough ? 1 : @interface.Value.Hubs.Count + (localReg ? 1 : 0);
+                                        var count = !_localHub.PathThrough ? 1 : @interface.Value.HubLinks.Count + (localReg ? 1 : 0);
 
                                         var hubs = new long[count];
                                         var intIds = new uint[count];
@@ -141,11 +151,11 @@ namespace NiL.Hub
 
                                         if (_localHub.PathThrough)
                                         {
-                                            for (var i = 0; i < @interface.Value.Hubs.Count; i++)
+                                            for (var i = 0; i < @interface.Value.HubLinks.Count; i++)
                                             {
-                                                hubs[i] = @interface.Value.Hubs[i].Hub.Id;
-                                                intIds[i] = @interface.Value.Hubs[i].InterfaceId;
-                                                versions[i] = @interface.Value.Hubs[i].Version;
+                                                hubs[i] = @interface.Value.HubLinks[i].Hub.Id;
+                                                intIds[i] = @interface.Value.HubLinks[i].InterfaceId;
+                                                versions[i] = @interface.Value.HubLinks[i].ShareId;
                                             }
                                         }
 
@@ -153,7 +163,7 @@ namespace NiL.Hub
                                         {
                                             hubs[count - 1] = _localHub.Id;
                                             intIds[count - 1] = @interface.Value.LocalId;
-                                            versions[count - 1] = @interface.Value.LocalVersion;
+                                            versions[count - 1] = @interface.Value.LocalShareId;
                                         }
 
                                         writeRegisterInterface(hubs, @interface.Key, intIds, versions);
@@ -198,7 +208,7 @@ namespace NiL.Hub
                             forAllHubConnections(false, hubConn => // only those that are connected directly 
                             {
                                 hubConn.writeRegisterHub(hub);
-                                return true;
+                                hubConn.FlushOutputBuffer();
                             });
                         });
                     }
@@ -223,7 +233,7 @@ namespace NiL.Hub
                         forAllHubConnections(false, hubConn => // only those that are connected directly
                         {
                             hubConn.writeUnRegisterHub(hubId);
-                            return true;
+                            hubConn.FlushOutputBuffer();
                         });
                     });
 
@@ -250,15 +260,15 @@ namespace NiL.Hub
                         if (_localHub._knownInterfaces.TryGetValue(interfaceName, out var @interface))
                         {
                             var wPos = 0;
-                            lock (@interface.Hubs)
+                            lock (@interface.HubLinks)
                             {
                                 for (var i = 0; i < hubs.Length; i++)
                                 {
                                     var hubId = hubs[i];
 
                                     var knownHub = false;
-                                    for (var j = 0; j < @interface.Hubs.Count && !knownHub; j++)
-                                        knownHub |= @interface.Hubs[j].Hub.Id == hubId;
+                                    for (var j = 0; j < @interface.HubLinks.Count && !knownHub; j++)
+                                        knownHub |= @interface.HubLinks[j].Hub.Id == hubId;
 
                                     if (!knownHub)
                                     {
@@ -289,7 +299,7 @@ namespace NiL.Hub
                                         forAllHubConnections(false, connection =>
                                         {
                                             connection.writeBlob(blob);
-                                            return true;
+                                            connection.FlushOutputBuffer();
                                         });
                                     });
                                 }
@@ -303,7 +313,7 @@ namespace NiL.Hub
                                         forAllHubConnections(false, connection => // only those that are connected directly
                                         {
                                             connection.writeRegisterInterface(hubs, interfaceName, interfaceIds, versions);
-                                            return true;
+                                            connection.FlushOutputBuffer();
                                         });
                                     });
                                 }
@@ -328,7 +338,7 @@ namespace NiL.Hub
                                     forAllHubConnections(false, connection =>
                                     {
                                         connection.writeBlob(blob);
-                                        return true;
+                                        connection.FlushOutputBuffer();
                                     });
                                 });
                             }
@@ -346,7 +356,7 @@ namespace NiL.Hub
 
                     if (receiverId == _localHub.Id)
                     {
-                        processReceived(doAfter, senderHubId, size);
+                        processReceivedInner(doAfter, senderHubId, size);
                     }
                     else
                     {
@@ -818,7 +828,7 @@ namespace NiL.Hub
                 }
             }
 
-            @interface.Hubs.Add(new RemoteHubInterfaceLink(hub, interfaceInHubId, version));
+            @interface.HubLinks.Add(new RemoteHubInterfaceLink(hub, interfaceInHubId, version));
             lock (hub._interfaces)
                 hub._interfaces.Add(@interface.Name);
         }
@@ -840,12 +850,12 @@ namespace NiL.Hub
 
             if (unavailableHubs != null)
             {
-                forAllHubConnections(false, hubConn => // only those that are connected directly 
+                forAllHubConnections(false, hubConnection => // only those that are connected directly 
                 {
                     foreach (var hubId in unavailableHubs)
-                        hubConn.writeUnRegisterHub(hubId);
+                        hubConnection.writeUnRegisterHub(hubId);
 
-                    return true;
+                    hubConnection.FlushOutputBuffer();
                 });
             }
 
@@ -853,19 +863,19 @@ namespace NiL.Hub
 
             lock (_localHub._hubsConnctions)
             {
-                if (_localHub._hubsConnctions.TryGetValue(IPEndPoint, out var connections))
+                if (_localHub._hubsConnctions.TryGetValue(EndPoint, out var connections))
                 {
                     connections.Remove(this);
 
                     if (connections.Count == 0)
-                        _localHub._hubsConnctions.Remove(IPEndPoint);
+                        _localHub._hubsConnctions.Remove(EndPoint);
                 }
             }
         }
 
-        private void forAllHubConnections(bool includeThisHubId, Func<HubConnection, bool> action)
+        private void forAllHubConnections(bool includeThisHubId, Action<HubConnection> action)
         {
-            HubConnection[] hubs;
+            HubConnection[] hubs = null;
             lock (_localHub._hubsConnctions)
                 hubs = _localHub._hubsConnctions.Values.SelectMany(x => x).ToArray();
 
@@ -880,8 +890,7 @@ namespace NiL.Hub
 
                 lock (hubConnection._sync)
                 {
-                    if (action(hubConnection))
-                        hubConnection.FlushOutputBuffer();
+                    action(hubConnection);
                 }
             }
         }
@@ -1218,11 +1227,13 @@ namespace NiL.Hub
             _outputBuffer.Write(buffer);
         }
 
-        private void writePing()
+        public void SendPing()
         {
-            Debug.Assert(Monitor.IsEntered(_sync));
-
-            _outputBufferWritter.Write((byte)PackageType.Ping);
+            lock (_sync)
+            {
+                _outputBufferWritter.Write((byte)PackageType.Ping);
+                FlushOutputBuffer();
+            }
         }
 
         private void writePong()

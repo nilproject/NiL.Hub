@@ -277,14 +277,26 @@ namespace NiL.Exev
         {
             if (type.IsArray)
             {
-                var itemType = type.GetElementType();
                 var array = (Array)value;
                 var len = array == null ? -1 : array.Length;
 
                 addInt32(result, len);
 
-                for (var i = 0; i < len; i++)
-                    addValue(result, array.GetValue(i), itemType);
+                if (value is byte[] byteArray)
+                {
+                    if (result.Capacity < result.Count + byteArray.Length)
+                        result.Capacity = result.Count + byteArray.Length;
+
+                    for (var i = 0; i < len; i++)
+                        result.Add(byteArray[i]);
+                }
+                else
+                {
+                    var itemType = type.GetElementType();
+
+                    for (var i = 0; i < len; i++)
+                        addValue(result, array.GetValue(i), itemType);
+                }
 
                 return;
             }
@@ -401,7 +413,7 @@ namespace NiL.Exev
 
                     if (valueType.IsValueType)
                     {
-                        var members = _MetadataWrappersCache.GetMembers(valueType);
+                        var members = _MetadataWrappersCache.GetFieldAndProps(valueType);
                         for (var i = 0; i < members.Length; i++)
                         {
                             if (members[i] is FieldInfo field)
@@ -491,7 +503,10 @@ namespace NiL.Exev
         private void addString(List<byte> result, string value)
         {
             if (value == null)
+            {
                 addInt16(result, -1);
+                return;
+            }
 
             if (value.Length > short.MaxValue)
                 throw new ArgumentOutOfRangeException("String is too long");

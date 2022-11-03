@@ -8,7 +8,7 @@ namespace NiL.Hub
     {
         RemoteHub RemoteHub { get; }
         IEnumerable<RemoteHub> Hubs { get; }
-        IPEndPoint IPEndPoint { get; }
+        EndPoint EndPoint { get; }
         HubConnectionState State { get; }
 
         void Disconnect();

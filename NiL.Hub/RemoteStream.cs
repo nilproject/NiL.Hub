@@ -180,16 +180,38 @@ namespace NiL.Hub
                 if (_awaiter != null)
                     throw new InvalidOperationException("Stream already in awaiting state");
 
-                using var connection = _remoteHub._connections.GetLockedConenction();
-                connection.Value.WriteRetransmitTo(_remoteHub.Id, x =>
-                {
-                    x.WriteStreamWrite(_streamId, buffer.Span);
-                });
-
-                connection.Value.FlushOutputBuffer();
-
                 _awaiter = new TaskCompletionSource<byte[]>();
-                return new ValueTask(_awaiter.Task);
+                var lastTcs = _awaiter;
+                var resultTask = _awaiter.Task;
+
+                var pos = 0;
+                const int chunkSize = 30000;
+
+                using var connection = _remoteHub._connections.GetLockedConenction();
+
+                for (; ; )
+                {
+                    connection.Value.WriteRetransmitTo(_remoteHub.Id, x =>
+                    {
+                        x.WriteStreamWrite(_streamId, buffer.Span.Slice(pos, Math.Min(buffer.Length - pos, chunkSize)));
+                    });
+
+                    connection.Value.FlushOutputBuffer();
+
+                    pos += chunkSize;
+
+                    if (pos >= buffer.Length)
+                    {
+                        break;
+                    }
+
+                    var nextTcs = new TaskCompletionSource<byte[]>();
+                    resultTask = nextTcs.Task;
+                    lastTcs.Task.ContinueWith(x => _awaiter = nextTcs, TaskContinuationOptions.ExecuteSynchronously);
+                    lastTcs = nextTcs;
+                }
+
+                return new ValueTask(resultTask);
             }
         }
 
@@ -201,14 +223,11 @@ namespace NiL.Hub
         internal void ReceiveData(byte[] data)
         {
             lock (_sync)
-                try
-                {
-                    _awaiter?.SetResult(data);
-                }
-                finally
-                {
-                    _awaiter = null;
-                }
+            {
+                var awaiter = _awaiter;
+                _awaiter = null;
+                awaiter?.SetResult(data);
+            }
         }
 
         public override void Flush()

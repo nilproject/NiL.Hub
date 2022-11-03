@@ -48,8 +48,8 @@ namespace NiL.Hub
         internal readonly Dictionary<MemberInfo, bool> _accessCache = new Dictionary<MemberInfo, bool>();
         internal readonly TypesMapLayer _registeredInderfaces = new TypesMapLayer();
         internal readonly Dictionary<string, SharedInterface> _knownInterfaces = new Dictionary<string, SharedInterface>();
-        internal readonly Dictionary<IPEndPoint, Thread> _listeners = new Dictionary<IPEndPoint, Thread>();
-        internal readonly Dictionary<IPEndPoint, List<HubConnection>> _hubsConnctions = new Dictionary<IPEndPoint, List<HubConnection>>();
+        internal readonly Dictionary<EndPoint, Thread> _listeners = new Dictionary<EndPoint, Thread>();
+        internal readonly Dictionary<EndPoint, List<HubConnection>> _hubsConnctions = new Dictionary<EndPoint, List<HubConnection>>();
         internal readonly Dictionary<long, RemoteHub> _knownHubs = new Dictionary<long, RemoteHub>();
         internal readonly Dictionary<int, RegisteredStream> _streams = new Dictionary<int, RegisteredStream>();
         internal readonly Dictionary<(long, int), TaskCompletionSource<RemoteStream>> _remoteStreams = new Dictionary<(long, int), TaskCompletionSource<RemoteStream>>();
@@ -63,7 +63,7 @@ namespace NiL.Hub
 
         public IEnumerable<RemoteHub> KnownHubs => _knownHubs.Values;
         public IEnumerable<HubConnection> Connections => _hubsConnctions.Values.SelectMany(x => x);
-        public IEnumerable<IPEndPoint> EndPoints => _listeners.Count > 0 ? _listeners.Select(x => x.Key) : default;
+        public IEnumerable<EndPoint> EndPoints => _listeners.Count > 0 ? _listeners.Select(x => x.Key) : default;
 
         public bool PathThrough { get; set; }
 
@@ -110,9 +110,9 @@ namespace NiL.Hub
                     return false;
                 }
 
-                if (!(remInterface is SharedInterface<TInterface>))
+                if (remInterface is not SharedInterface<TInterface>)
                 {
-                    remInterface = new SharedInterface<TInterface>(this, remInterface.Name, remInterface.Hubs);
+                    remInterface = new SharedInterface<TInterface>(this, remInterface.Name, remInterface.HubLinks);
                     _knownInterfaces[interfaceFullName] = remInterface;
                 }
 
@@ -151,12 +151,15 @@ namespace NiL.Hub
             GC.SuppressFinalize(this);
         }
 
-        public void StartListening(IPEndPoint endPoint)
+        public void StartListening(EndPoint endPoint)
         {
             if (_listeners.ContainsKey(endPoint))
                 return;
 
-            var listener = new TcpListener(endPoint);
+            if (endPoint is not IPEndPoint ipEndPoint)
+                throw new NotImplementedException("Listening of " + endPoint.GetType() + " is not implemented");
+
+            var listener = new TcpListener(ipEndPoint);
             listener.Start();
             endPoint = (IPEndPoint)listener.LocalEndpoint;
             try
@@ -172,7 +175,7 @@ namespace NiL.Hub
             }
         }
 
-        public void StopListening(IPEndPoint endPoint)
+        public void StopListening(EndPoint endPoint)
         {
             if (!_listeners.ContainsKey(endPoint))
                 return;
@@ -203,7 +206,18 @@ namespace NiL.Hub
                         var tcpClient = listener.AcceptTcpClient();
                         if (tcpClient != null)
                         {
-                            HubConnection.AcceptConnected(this, tcpClient, false);
+                            var connection = new HubConnection(this, tcpClient.Client);
+
+                            lock (_hubsConnctions)
+                            {
+                                if (!_hubsConnctions.TryGetValue(connection.EndPoint, out var hubConnections))
+                                    _hubsConnctions[connection.EndPoint] = hubConnections = new List<HubConnection>();
+
+                                hubConnections.Add(connection);
+                            }
+
+                            var worker = new HubConnectionWorker(connection, false);
+                            worker.StartWorker();
                         }
                     }
                 }
@@ -214,9 +228,27 @@ namespace NiL.Hub
             }
         }
 
-        public Task<IHubConnection> Connect(IPEndPoint endPoint, bool autoReconnect = true)
+        public Task<IHubConnection> Connect(EndPoint endPoint, bool autoReconnect = true)
         {
-            return Task.Run(() => HubConnection.Connect(this, endPoint, autoReconnect) as IHubConnection);
+            return Task.Run(() =>
+            {
+                var connection = HubConnection.Connect(this, endPoint);
+
+                lock (_hubsConnctions)
+                {
+                    if (!_hubsConnctions.TryGetValue(connection.EndPoint, out var hubConnections))
+                        _hubsConnctions[connection.EndPoint] = hubConnections = new List<HubConnection>();
+
+                    hubConnections.Add(connection);
+                }
+
+                var worker = new HubConnectionWorker(connection, autoReconnect);
+                worker.StartWorker();
+                
+                connection.StartHandshake();
+                
+                return connection as IHubConnection;
+            });
         }
 
         internal RemoteHub HubIsAvailableThrough(HubConnection hubConnection, long hubId, int distance, string hubName)
@@ -291,9 +323,9 @@ namespace NiL.Hub
                                 foreach (var interfaceName in hub._interfaces)
                                 {
                                     var @interface = _knownInterfaces[interfaceName];
-                                    @interface.Hubs.RemoveAll(x => x.Hub.Id == hub.Id);
+                                    @interface.HubLinks.RemoveAll(x => x.Hub.Id == hub.Id);
 
-                                    if (@interface.Hubs.Count == 0)
+                                    if (@interface.HubLinks.Count == 0)
                                     {
                                         if (interfacesToRemove == null)
                                             interfacesToRemove = new List<string>();
@@ -337,7 +369,7 @@ namespace NiL.Hub
                         _knownInterfaces[interfaceName] = knownInterface = new SharedInterface<TInterface>(this, interfaceName)
                         {
                             LocalId = interfaceId,
-                            LocalVersion = version
+                            LocalShareId = version
                         };
                     }
 

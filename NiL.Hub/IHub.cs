@@ -10,7 +10,7 @@ namespace NiL.Hub
     {
         string Name { get; }
         long Id { get; }
-        IEnumerable<IPEndPoint> EndPoints { get; }
+        IEnumerable<EndPoint> EndPoints { get; }
 
         bool PathThrough { get; set; }
 
@@ -18,10 +18,10 @@ namespace NiL.Hub
 
         bool TryGet<TInterface>(out ISharedInterface<TInterface> remoteInterface) where TInterface : class;
 
-        void StartListening(IPEndPoint endPoint);
-        void StopListening(IPEndPoint endPoint);
+        void StartListening(EndPoint endPoint);
+        void StopListening(EndPoint endPoint);
 
-        Task<IHubConnection> Connect(IPEndPoint endPoint, bool autoReconnect = true);
+        Task<IHubConnection> Connect(EndPoint endPoint, bool autoReconnect = true);
 
         Task RegisterInterface<TInterface>(TInterface implementation, int version = default) where TInterface : class;
         Task UnRegisterInterface<TInterface>() where TInterface : class;

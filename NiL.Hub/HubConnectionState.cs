@@ -8,5 +8,6 @@
         Active,
         Disconnecting,
         Disconnected,
+        Disposed,
     }
 }

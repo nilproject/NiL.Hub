@@ -5,16 +5,16 @@ namespace NiL.Hub
 {
     internal class SharedInterface : ISharedInterface
     {
-        public readonly List<RemoteHubInterfaceLink> Hubs;
+        public readonly List<RemoteHubInterfaceLink> HubLinks;
         public object LocalImplementation;
         public uint LocalId;
-        public int LocalVersion;
+        public int LocalShareId;
 
         public string Name { get; }
 
         public SharedInterface(string fullName)
         {
-            Hubs = new List<RemoteHubInterfaceLink>();
+            HubLinks = new List<RemoteHubInterfaceLink>();
             Name = fullName;
         }
 
@@ -23,7 +23,7 @@ namespace NiL.Hub
             if (string.IsNullOrWhiteSpace(fullName))
                 throw new ArgumentException($"\"{nameof(fullName)}\" cannot be empty of white space", nameof(fullName));
 
-            Hubs = remoteHubs ?? throw new ArgumentNullException(nameof(remoteHubs));
+            HubLinks = remoteHubs ?? throw new ArgumentNullException(nameof(remoteHubs));
             Name = fullName;
         }
     }

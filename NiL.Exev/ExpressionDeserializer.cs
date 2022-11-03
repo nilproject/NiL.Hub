@@ -73,54 +73,54 @@ namespace NiL.Exev
                 case ExpressionType.NotEqual:
                 case ExpressionType.Power:
                 case ExpressionType.PowerAssign:
-                {
-                    var left = deserialize(data, ref index, parameters);
-                    var right = deserialize(data, ref index, parameters);
-
-                    switch (nodeType)
                     {
-                        case ExpressionType.Add: return Expression.Add(left, right);
-                        case ExpressionType.AddChecked: return Expression.AddChecked(left, right);
-                        case ExpressionType.AddAssign: return Expression.AddAssign(left, right);
-                        case ExpressionType.AddAssignChecked: return Expression.AddAssign(left, right);
-                        case ExpressionType.Multiply: return Expression.Multiply(left, right);
-                        case ExpressionType.MultiplyAssign: return Expression.MultiplyAssign(left, right);
-                        case ExpressionType.MultiplyChecked: return Expression.MultiplyChecked(left, right);
-                        case ExpressionType.MultiplyAssignChecked: return Expression.MultiplyAssignChecked(left, right);
-                        case ExpressionType.Modulo: return Expression.Modulo(left, right);
-                        case ExpressionType.ModuloAssign: return Expression.ModuloAssign(left, right);
-                        case ExpressionType.Divide: return Expression.Divide(left, right);
-                        case ExpressionType.DivideAssign: return Expression.DivideAssign(left, right);
-                        case ExpressionType.Equal: return Expression.Equal(left, right);
-                        case ExpressionType.GreaterThan: return Expression.GreaterThan(left, right);
-                        case ExpressionType.GreaterThanOrEqual: return Expression.GreaterThanOrEqual(left, right);
-                        case ExpressionType.LessThan: return Expression.LessThan(left, right);
-                        case ExpressionType.LessThanOrEqual: return Expression.LessThanOrEqual(left, right);
-                        case ExpressionType.ExclusiveOr: return Expression.ExclusiveOr(left, right);
-                        case ExpressionType.ExclusiveOrAssign: return Expression.ExclusiveOrAssign(left, right);
-                        case ExpressionType.Coalesce: return Expression.Coalesce(left, right);
-                        case ExpressionType.And: return Expression.And(left, right);
-                        case ExpressionType.AndAlso: return Expression.AndAlso(left, right);
-                        case ExpressionType.AndAssign: return Expression.AndAssign(left, right);
-                        case ExpressionType.Or: return Expression.And(left, right);
-                        case ExpressionType.OrElse: return Expression.OrElse(left, right);
-                        case ExpressionType.OrAssign: return Expression.OrAssign(left, right);
-                        case ExpressionType.Assign: return Expression.Assign(left, right);
-                        case ExpressionType.LeftShift: return Expression.LeftShift(left, right);
-                        case ExpressionType.LeftShiftAssign: return Expression.LeftShiftAssign(left, right);
-                        case ExpressionType.RightShift: return Expression.RightShift(left, right);
-                        case ExpressionType.RightShiftAssign: return Expression.RightShiftAssign(left, right);
-                        case ExpressionType.NotEqual: return Expression.NotEqual(left, right);
-                        case ExpressionType.Power: return Expression.Power(left, right);
-                        case ExpressionType.PowerAssign: return Expression.PowerAssign(left, right);
-                        case ExpressionType.Subtract: return Expression.Subtract(left, right);
-                        case ExpressionType.SubtractChecked: return Expression.SubtractChecked(left, right);
-                        case ExpressionType.SubtractAssign: return Expression.SubtractAssign(left, right);
-                        case ExpressionType.SubtractAssignChecked: return Expression.SubtractAssignChecked(left, right);
+                        var left = deserialize(data, ref index, parameters);
+                        var right = deserialize(data, ref index, parameters);
 
-                        default: throw new NotImplementedException();
+                        switch (nodeType)
+                        {
+                            case ExpressionType.Add: return Expression.Add(left, right);
+                            case ExpressionType.AddChecked: return Expression.AddChecked(left, right);
+                            case ExpressionType.AddAssign: return Expression.AddAssign(left, right);
+                            case ExpressionType.AddAssignChecked: return Expression.AddAssign(left, right);
+                            case ExpressionType.Multiply: return Expression.Multiply(left, right);
+                            case ExpressionType.MultiplyAssign: return Expression.MultiplyAssign(left, right);
+                            case ExpressionType.MultiplyChecked: return Expression.MultiplyChecked(left, right);
+                            case ExpressionType.MultiplyAssignChecked: return Expression.MultiplyAssignChecked(left, right);
+                            case ExpressionType.Modulo: return Expression.Modulo(left, right);
+                            case ExpressionType.ModuloAssign: return Expression.ModuloAssign(left, right);
+                            case ExpressionType.Divide: return Expression.Divide(left, right);
+                            case ExpressionType.DivideAssign: return Expression.DivideAssign(left, right);
+                            case ExpressionType.Equal: return Expression.Equal(left, right);
+                            case ExpressionType.GreaterThan: return Expression.GreaterThan(left, right);
+                            case ExpressionType.GreaterThanOrEqual: return Expression.GreaterThanOrEqual(left, right);
+                            case ExpressionType.LessThan: return Expression.LessThan(left, right);
+                            case ExpressionType.LessThanOrEqual: return Expression.LessThanOrEqual(left, right);
+                            case ExpressionType.ExclusiveOr: return Expression.ExclusiveOr(left, right);
+                            case ExpressionType.ExclusiveOrAssign: return Expression.ExclusiveOrAssign(left, right);
+                            case ExpressionType.Coalesce: return Expression.Coalesce(left, right);
+                            case ExpressionType.And: return Expression.And(left, right);
+                            case ExpressionType.AndAlso: return Expression.AndAlso(left, right);
+                            case ExpressionType.AndAssign: return Expression.AndAssign(left, right);
+                            case ExpressionType.Or: return Expression.And(left, right);
+                            case ExpressionType.OrElse: return Expression.OrElse(left, right);
+                            case ExpressionType.OrAssign: return Expression.OrAssign(left, right);
+                            case ExpressionType.Assign: return Expression.Assign(left, right);
+                            case ExpressionType.LeftShift: return Expression.LeftShift(left, right);
+                            case ExpressionType.LeftShiftAssign: return Expression.LeftShiftAssign(left, right);
+                            case ExpressionType.RightShift: return Expression.RightShift(left, right);
+                            case ExpressionType.RightShiftAssign: return Expression.RightShiftAssign(left, right);
+                            case ExpressionType.NotEqual: return Expression.NotEqual(left, right);
+                            case ExpressionType.Power: return Expression.Power(left, right);
+                            case ExpressionType.PowerAssign: return Expression.PowerAssign(left, right);
+                            case ExpressionType.Subtract: return Expression.Subtract(left, right);
+                            case ExpressionType.SubtractChecked: return Expression.SubtractChecked(left, right);
+                            case ExpressionType.SubtractAssign: return Expression.SubtractAssign(left, right);
+                            case ExpressionType.SubtractAssignChecked: return Expression.SubtractAssignChecked(left, right);
+
+                            default: throw new NotImplementedException();
+                        }
                     }
-                }
 
                 case ExpressionType.ArrayLength:
                 case ExpressionType.Negate:
@@ -135,302 +135,302 @@ namespace NiL.Exev
                 case ExpressionType.IsTrue:
                 case ExpressionType.IsFalse:
                 case ExpressionType.OnesComplement:
-                {
-                    var operand = deserialize(data, ref index, parameters);
-                    switch (nodeType)
                     {
-                        case ExpressionType.ArrayLength: return Expression.ArrayLength(operand);
-                        case ExpressionType.Negate: return Expression.Negate(operand);
-                        case ExpressionType.NegateChecked: return Expression.NegateChecked(operand);
-                        case ExpressionType.Not: return Expression.Not(operand);
-                        case ExpressionType.Quote: return Expression.Quote(operand);
-                        case ExpressionType.PreIncrementAssign: return Expression.PreIncrementAssign(operand);
-                        case ExpressionType.PreDecrementAssign: return Expression.PreDecrementAssign(operand);
-                        case ExpressionType.PostIncrementAssign: return Expression.PostIncrementAssign(operand);
-                        case ExpressionType.PostDecrementAssign: return Expression.PostDecrementAssign(operand);
-                        case ExpressionType.IsTrue: return Expression.IsTrue(operand);
-                        case ExpressionType.IsFalse: return Expression.IsFalse(operand);
-                        case ExpressionType.OnesComplement: return Expression.OnesComplement(operand);
-                        default: throw new NotImplementedException();
+                        var operand = deserialize(data, ref index, parameters);
+                        switch (nodeType)
+                        {
+                            case ExpressionType.ArrayLength: return Expression.ArrayLength(operand);
+                            case ExpressionType.Negate: return Expression.Negate(operand);
+                            case ExpressionType.NegateChecked: return Expression.NegateChecked(operand);
+                            case ExpressionType.Not: return Expression.Not(operand);
+                            case ExpressionType.Quote: return Expression.Quote(operand);
+                            case ExpressionType.PreIncrementAssign: return Expression.PreIncrementAssign(operand);
+                            case ExpressionType.PreDecrementAssign: return Expression.PreDecrementAssign(operand);
+                            case ExpressionType.PostIncrementAssign: return Expression.PostIncrementAssign(operand);
+                            case ExpressionType.PostDecrementAssign: return Expression.PostDecrementAssign(operand);
+                            case ExpressionType.IsTrue: return Expression.IsTrue(operand);
+                            case ExpressionType.IsFalse: return Expression.IsFalse(operand);
+                            case ExpressionType.OnesComplement: return Expression.OnesComplement(operand);
+                            default: throw new NotImplementedException();
+                        }
                     }
-                }
 
                 case ExpressionType.Index:
-                {
-                    var obj = deserialize(data, ref index, parameters);
-                    var count = data[index++];
-                    var args = new Expression[count];
-                    for (var i = 0; i < count; i++)
-                        args[i] = deserialize(data, ref index, parameters);
+                    {
+                        var obj = deserialize(data, ref index, parameters);
+                        var count = data[index++];
+                        var args = new Expression[count];
+                        for (var i = 0; i < count; i++)
+                            args[i] = deserialize(data, ref index, parameters);
 
-                    return Expression.ArrayAccess(obj, args);
-                }
+                        return Expression.ArrayAccess(obj, args);
+                    }
 
                 case ExpressionType.Unbox:
                 case ExpressionType.Convert:
                 case ExpressionType.TypeAs:
                 case ExpressionType.ConvertChecked:
-                {
-                    var value = deserialize(data, ref index, parameters);
-                    var type = getType(data, ref index);
-
-                    if (nodeType == ExpressionType.Convert)
                     {
-                        if (type == typeof(Enum))
-                        {
-                            var interType = default(Type);
+                        var value = deserialize(data, ref index, parameters);
+                        var type = getType(data, ref index);
 
-                            switch (Type.GetTypeCode(value.Type))
+                        if (nodeType == ExpressionType.Convert)
+                        {
+                            if (type == typeof(Enum))
                             {
-                                case TypeCode.Byte: interType = typeof(UnknownByteEnum); break;
-                                case TypeCode.SByte: interType = typeof(UnknownSbyteEnum); break;
-                                case TypeCode.Int16: interType = typeof(UnknownShortEnum); break;
-                                case TypeCode.UInt16: interType = typeof(UnknownUshortEnum); break;
-                                case TypeCode.Int32: interType = typeof(UnknownIntEnum); break;
-                                case TypeCode.UInt32: interType = typeof(UnknownUintEnum); break;
-                                case TypeCode.Int64: interType = typeof(UnknownLongEnum); break;
-                                case TypeCode.UInt64: interType = typeof(UnknownUlongEnum); break;
+                                var interType = default(Type);
+
+                                switch (Type.GetTypeCode(value.Type))
+                                {
+                                    case TypeCode.Byte: interType = typeof(UnknownByteEnum); break;
+                                    case TypeCode.SByte: interType = typeof(UnknownSbyteEnum); break;
+                                    case TypeCode.Int16: interType = typeof(UnknownShortEnum); break;
+                                    case TypeCode.UInt16: interType = typeof(UnknownUshortEnum); break;
+                                    case TypeCode.Int32: interType = typeof(UnknownIntEnum); break;
+                                    case TypeCode.UInt32: interType = typeof(UnknownUintEnum); break;
+                                    case TypeCode.Int64: interType = typeof(UnknownLongEnum); break;
+                                    case TypeCode.UInt64: interType = typeof(UnknownUlongEnum); break;
+                                }
+
+                                value = Expression.Call(
+                                    typeof(Enum).GetMethod("ToObject", new[] { typeof(Type), value.Type }),
+                                    Expression.Constant(interType),
+                                    value);
                             }
 
-                            value = Expression.Call(
-                                typeof(Enum).GetMethod("ToObject", new[] { typeof(Type), value.Type }),
-                                Expression.Constant(interType),
-                                value);
+                            return Expression.Convert(value, type);
                         }
 
-                        return Expression.Convert(value, type);
+                        if (nodeType == ExpressionType.TypeAs)
+                            return Expression.TypeAs(value, type);
+
+                        if (nodeType == ExpressionType.Unbox)
+                            return Expression.Unbox(value, type);
+
+                        return Expression.ConvertChecked(value, type);
                     }
-
-                    if (nodeType == ExpressionType.TypeAs)
-                        return Expression.TypeAs(value, type);
-
-                    if (nodeType == ExpressionType.Unbox)
-                        return Expression.Unbox(value, type);
-
-                    return Expression.ConvertChecked(value, type);
-                }
 
                 case ExpressionType.MemberAccess:
-                {
-                    var expr = deserialize(data, ref index, parameters);
-
-                    var type = getType(data, ref index);
-
-                    var memberName = getString(data, ref index);
-                    var member = _MetadataWrappersCache.GetMember(type, memberName);
-
-                    return Expression.MakeMemberAccess(expr, member);
-                }
-
-                case ExpressionType.Parameter:
-                {
-                    var parameterIndex = getInt16(data, ref index);
-                    var parameter = parameters[parameterIndex];
-                    return parameter;
-                }
-
-                case ExpressionType.Lambda:
-                {
-                    var oldParamsCount = parameters.Count;
-                    var lambdaParameters = deserializeVariables(data, ref index, parameters);
-
-                    var body = deserialize(data, ref index, parameters);
-
-                    parameters.RemoveRange(oldParamsCount, parameters.Count - oldParamsCount);
-
-                    return Expression.Lambda(body, lambdaParameters);
-                }
-
-                case ExpressionType.Constant:
-                {
-                    var type = getType(data, ref index);
-                    var value = getValue(data, ref index, type);
-
-                    //if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>))
-                    //    type = typeof(object);
-
-                    return Expression.Constant(value, type);
-                }
-
-                case ExpressionType.ArrayIndex:
-                {
-                    var array = deserialize(data, ref index, parameters);
-                    var arrIndex = deserialize(data, ref index, parameters);
-                    return Expression.ArrayIndex(array, arrIndex);
-                }
-
-                case ExpressionType.Conditional:
-                {
-                    var type = getType(data, ref index);
-                    var test = deserialize(data, ref index, parameters);
-                    var ifTrue = deserialize(data, ref index, parameters);
-                    var ifFalse = deserialize(data, ref index, parameters);
-
-                    if (!type.IsAssignableFrom(ifTrue.Type))
-                        ifTrue = Expression.Convert(ifTrue, type);
-
-                    if (!type.IsAssignableFrom(ifFalse.Type))
-                        ifFalse = Expression.Convert(ifFalse, type);
-
-                    /*if (ifTrue.Type != ifFalse.Type)
                     {
-                        if (ifFalse.Type.IsClass && ifTrue is ConstantExpression const0 && const0.Value == null)
-                            ifTrue = Expression.Convert(ifTrue, ifFalse.Type);
+                        var expr = deserialize(data, ref index, parameters);
 
-                        if (ifTrue.Type.IsClass && ifFalse is ConstantExpression const1 && const1.Value == null)
-                            ifFalse = Expression.Convert(ifFalse, ifTrue.Type);
+                        var type = getType(data, ref index);
 
-                        var type = ifTrue.Type;
-                        while (!type.IsAssignableFrom(ifFalse.Type))
-                        {
-                            type = type.BaseType;
-                        }
-                    }*/
+                        var memberName = getString(data, ref index);
+                        var member = _MetadataWrappersCache.GetFieldOrProp(type, memberName);
 
-                    return Expression.Condition(test, ifTrue, ifFalse, type);
-                }
-
-                case ExpressionType.Call:
-                {
-                    var target = deserialize(data, ref index, parameters);
-                    var declType = getType(data, ref index);
-                    var name = getString(data, ref index);
-                    var count = getInt16(data, ref index);
-                    var arguments = new Expression[count];
-                    var types = new Type[count];
-                    for (var i = 0; i < count; i++)
-                    {
-                        var argExp = deserialize(data, ref index, parameters);
-                        arguments[i] = argExp;
-                        types[i] = argExp.Type;
+                        return Expression.MakeMemberAccess(expr, member);
                     }
 
-                    var isGeneric = data[index++] != 0;
-
-                    MethodInfo method = null;
-                    if (isGeneric)
+                case ExpressionType.Parameter:
                     {
-                        var genericArgumentsCount = data[index++];
-                        var genericArguments = new Type[genericArgumentsCount];
-                        var i = 0;
-                        for (; i < genericArgumentsCount; i++)
+                        var parameterIndex = getInt16(data, ref index);
+                        var parameter = parameters[parameterIndex];
+                        return parameter;
+                    }
+
+                case ExpressionType.Lambda:
+                    {
+                        var oldParamsCount = parameters.Count;
+                        var lambdaParameters = deserializeVariables(data, ref index, parameters);
+
+                        var body = deserialize(data, ref index, parameters);
+
+                        parameters.RemoveRange(oldParamsCount, parameters.Count - oldParamsCount);
+
+                        return Expression.Lambda(body, lambdaParameters);
+                    }
+
+                case ExpressionType.Constant:
+                    {
+                        var type = getType(data, ref index);
+                        var value = getValue(data, ref index, type);
+
+                        //if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>))
+                        //    type = typeof(object);
+
+                        return Expression.Constant(value, type);
+                    }
+
+                case ExpressionType.ArrayIndex:
+                    {
+                        var array = deserialize(data, ref index, parameters);
+                        var arrIndex = deserialize(data, ref index, parameters);
+                        return Expression.ArrayIndex(array, arrIndex);
+                    }
+
+                case ExpressionType.Conditional:
+                    {
+                        var type = getType(data, ref index);
+                        var test = deserialize(data, ref index, parameters);
+                        var ifTrue = deserialize(data, ref index, parameters);
+                        var ifFalse = deserialize(data, ref index, parameters);
+
+                        if (!type.IsAssignableFrom(ifTrue.Type))
+                            ifTrue = Expression.Convert(ifTrue, type);
+
+                        if (!type.IsAssignableFrom(ifFalse.Type))
+                            ifFalse = Expression.Convert(ifFalse, type);
+
+                        /*if (ifTrue.Type != ifFalse.Type)
                         {
-                            genericArguments[i] = getType(data, ref index);
-                        }
+                            if (ifFalse.Type.IsClass && ifTrue is ConstantExpression const0 && const0.Value == null)
+                                ifTrue = Expression.Convert(ifTrue, ifFalse.Type);
 
-                        var allMethods = _MetadataWrappersCache.GetMethods(declType);
+                            if (ifTrue.Type.IsClass && ifFalse is ConstantExpression const1 && const1.Value == null)
+                                ifFalse = Expression.Convert(ifFalse, ifTrue.Type);
 
-                        i = 0;
-                        for (; i < allMethods.Length; i++)
-                        {
-                            if (allMethods[i].Name == name)
-                                break;
-                        }
-
-                        for (; i < allMethods.Length; i++)
-                        {
-                            var methodInfo = allMethods[i];
-
-                            if (methodInfo.Name != name)
-                                break;
-
-                            if (methodInfo.IsGenericMethodDefinition
-                                && methodInfo.GetParameters().Length == types.Length
-                                && methodInfo.GetGenericArguments().Length == genericArguments.Length)
+                            var type = ifTrue.Type;
+                            while (!type.IsAssignableFrom(ifFalse.Type))
                             {
-                                var defMethod = methodInfo.MakeGenericMethod(genericArguments);
+                                type = type.BaseType;
+                            }
+                        }*/
 
-                                var prms = defMethod.GetParameters();
-                                var suit = true;
-                                for (var j = 0; j < prms.Length; j++)
+                        return Expression.Condition(test, ifTrue, ifFalse, type);
+                    }
+
+                case ExpressionType.Call:
+                    {
+                        var target = deserialize(data, ref index, parameters);
+                        var declType = getType(data, ref index);
+                        var name = getString(data, ref index);
+                        var count = getInt16(data, ref index);
+                        var arguments = new Expression[count];
+                        var types = new Type[count];
+                        for (var i = 0; i < count; i++)
+                        {
+                            var argExp = deserialize(data, ref index, parameters);
+                            arguments[i] = argExp;
+                            types[i] = argExp.Type;
+                        }
+
+                        var isGeneric = data[index++] != 0;
+
+                        MethodInfo method = null;
+                        if (isGeneric)
+                        {
+                            var genericArgumentsCount = data[index++];
+                            var genericArguments = new Type[genericArgumentsCount];
+                            var i = 0;
+                            for (; i < genericArgumentsCount; i++)
+                            {
+                                genericArguments[i] = getType(data, ref index);
+                            }
+
+                            var allMethods = _MetadataWrappersCache.GetMethods(declType);
+
+                            i = 0;
+                            for (; i < allMethods.Length; i++)
+                            {
+                                if (allMethods[i].Name == name)
+                                    break;
+                            }
+
+                            for (; i < allMethods.Length; i++)
+                            {
+                                var methodInfo = allMethods[i];
+
+                                if (methodInfo.Name != name)
+                                    break;
+
+                                if (methodInfo.IsGenericMethodDefinition
+                                    && methodInfo.GetParameters().Length == types.Length
+                                    && methodInfo.GetGenericArguments().Length == genericArguments.Length)
                                 {
-                                    if (!prms[j].ParameterType.IsAssignableFrom(types[j]))
+                                    var defMethod = methodInfo.MakeGenericMethod(genericArguments);
+
+                                    var prms = defMethod.GetParameters();
+                                    var suit = true;
+                                    for (var j = 0; j < prms.Length; j++)
                                     {
-                                        suit = false;
+                                        if (!prms[j].ParameterType.IsAssignableFrom(types[j]))
+                                        {
+                                            suit = false;
+                                            break;
+                                        }
+                                    }
+
+                                    if (suit)
+                                    {
+                                        method = defMethod;
                                         break;
                                     }
                                 }
-
-                                if (suit)
-                                {
-                                    method = defMethod;
-                                    break;
-                                }
                             }
                         }
+                        else
+                        {
+                            method = declType.GetMethod(name, types);
+                        }
+
+                        if (method == null)
+                            throw new InvalidOperationException("Unable to deserialize method call");
+
+                        if (method.IsStatic)
+                            return Expression.Call(method, arguments);
+
+                        return Expression.Call(target, method, arguments);
                     }
-                    else
-                    {
-                        method = declType.GetMethod(name, types);
-                    }
-
-                    if (method == null)
-                        throw new InvalidOperationException("Unable to deserialize method call");
-
-                    if (method.IsStatic)
-                        return Expression.Call(method, arguments);
-
-                    return Expression.Call(target, method, arguments);
-                }
 
                 case ExpressionType.Invoke:
-                {
-                    var lambda = deserialize(data, ref index, parameters);
-                    var count = getInt16(data, ref index);
-                    var args = new Expression[count];
-                    for (var i = 0; i < count; i++)
-                        args[i] = deserialize(data, ref index, parameters);
+                    {
+                        var lambda = deserialize(data, ref index, parameters);
+                        var count = getInt16(data, ref index);
+                        var args = new Expression[count];
+                        for (var i = 0; i < count; i++)
+                            args[i] = deserialize(data, ref index, parameters);
 
-                    return Expression.Invoke(lambda, args);
-                }
+                        return Expression.Invoke(lambda, args);
+                    }
 
                 case ExpressionType.NewArrayInit:
                 case ExpressionType.NewArrayBounds:
-                {
-                    var type = getType(data, ref index);
-                    var count = getInt32(data, ref index);
-                    var args = new Expression[count];
-                    for (var i = 0; i < count; i++)
-                        args[i] = deserialize(data, ref index, parameters);
+                    {
+                        var type = getType(data, ref index);
+                        var count = getInt32(data, ref index);
+                        var args = new Expression[count];
+                        for (var i = 0; i < count; i++)
+                            args[i] = deserialize(data, ref index, parameters);
 
-                    if (nodeType == ExpressionType.NewArrayInit)
-                        return Expression.NewArrayInit(type, args);
+                        if (nodeType == ExpressionType.NewArrayInit)
+                            return Expression.NewArrayInit(type, args);
 
-                    return Expression.NewArrayBounds(type, args);
-                }
+                        return Expression.NewArrayBounds(type, args);
+                    }
 
                 case ExpressionType.Block:
-                {
-                    var expressionsCount = getInt32(data, ref index);
-
-                    var oldParamsCount = parameters.Count;
-                    var variables = deserializeVariables(data, ref index, parameters);
-
-                    var body = new Expression[expressionsCount];
-                    for (var i = 0; i < expressionsCount; i++)
                     {
-                        body[i] = deserialize(data, ref index, parameters);
+                        var expressionsCount = getInt32(data, ref index);
+
+                        var oldParamsCount = parameters.Count;
+                        var variables = deserializeVariables(data, ref index, parameters);
+
+                        var body = new Expression[expressionsCount];
+                        for (var i = 0; i < expressionsCount; i++)
+                        {
+                            body[i] = deserialize(data, ref index, parameters);
+                        }
+
+                        parameters.RemoveRange(oldParamsCount, parameters.Count - oldParamsCount);
+
+                        return Expression.Block(variables, body);
                     }
-
-                    parameters.RemoveRange(oldParamsCount, parameters.Count - oldParamsCount);
-
-                    return Expression.Block(variables, body);
-                }
 
                 case ExpressionType.New:
-                {
-                    var type = getType(data, ref index);
-                    var argsCount = getInt16(data, ref index);
-                    var args = new Expression[argsCount];
-                    var types = new Type[argsCount];
-                    for (var i = 0; i < argsCount; i++)
                     {
-                        args[i] = deserialize(data, ref index, parameters);
-                        types[i] = args[i].Type;
-                    }
+                        var type = getType(data, ref index);
+                        var argsCount = getInt16(data, ref index);
+                        var args = new Expression[argsCount];
+                        var types = new Type[argsCount];
+                        for (var i = 0; i < argsCount; i++)
+                        {
+                            args[i] = deserialize(data, ref index, parameters);
+                            types[i] = args[i].Type;
+                        }
 
-                    return Expression.New(type.GetConstructor(types), args);
-                }
+                        return Expression.New(type.GetConstructor(types), args);
+                    }
 
                 default: throw new NotImplementedException(nodeType.ToString());
             }
@@ -461,10 +461,29 @@ namespace NiL.Exev
                     return null;
 
                 var array = _MetadataWrappersCache.CreateArray(type, len);
-                var elementType = type.GetElementType();
 
-                for (var i = 0; i < len; i++)
-                    array.SetValue(getValue(data, ref index, elementType), i);
+                if (array is byte[] byteArray)
+                {
+                    for (var i = 0; i < len; i++)
+                        byteArray[i] = data[index++];
+                }
+                else if (array is int[] intArray)
+                {
+                    for (var i = 0; i < len; i++)
+                        intArray[i] = getInt32(data, ref index);
+                }
+                else if (array is uint[] uintArray)
+                {
+                    for (var i = 0; i < len; i++)
+                        uintArray[i] = (uint)getInt32(data, ref index);
+                }
+                else
+                {
+                    var elementType = type.GetElementType();
+
+                    for (var i = 0; i < len; i++)
+                        array.SetValue(getValue(data, ref index, elementType), i);
+                }
 
                 return array;
             }
@@ -517,38 +536,44 @@ namespace NiL.Exev
                 case TypeCode.DateTime: return DateTime.FromBinary(getInt64(data, ref index));
 
                 case TypeCode.Object:
-                {
-                    if (type == typeof(object))
                     {
-                        var nestedType = getType(data, ref index);
-                        return getValue(data, ref index, nestedType);
-                    }
-
-                    if (type.IsValueType)
-                    {
-                        var members = _MetadataWrappersCache.GetMembers(type);
-                        var result = Activator.CreateInstance(type);
-                        for (var i = 0; i < members.Length; i++)
+                        if (type == typeof(object))
                         {
-                            if (members[i] is FieldInfo field)
-                            {
-                                field.SetValue(result, getValue(data, ref index, field.FieldType));
-                            }
+                            var nestedType = getType(data, ref index);
+                            return getValue(data, ref index, nestedType);
                         }
 
-                        return result;
+                        if (type.IsValueType)
+                        {
+                            var members = _MetadataWrappersCache.GetFieldAndProps(type);
+                            var result = Activator.CreateInstance(type);
+                            for (var i = 0; i < members.Length; i++)
+                            {
+                                if (members[i] is FieldInfo field)
+                                {
+                                    field.SetValue(result, getValue(data, ref index, field.FieldType));
+                                }
+                            }
+
+                            return result;
+                        }
+
+                        if (typeof(Type).IsAssignableFrom(type))
+                        {
+                            return Type.GetType(getString(data, ref index));
+                        }
+
+                        if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>))
+                            return getValue(data, ref index, type.GetGenericArguments()[0]);
+
+                        if (data[index] == 0)
+                        {
+                            index++;
+                            return null;
+                        }
+
+                        throw new NotSupportedException(type.ToString());
                     }
-
-                    if (typeof(Type).IsAssignableFrom(type))
-                    {
-                        return Type.GetType(getString(data, ref index));
-                    }
-
-                    if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>))
-                        return getValue(data, ref index, type.GetGenericArguments()[0]);
-
-                    throw new NotSupportedException(type.ToString());
-                }
 
                 case TypeCode.Empty: return null;
 
@@ -602,31 +627,31 @@ namespace NiL.Exev
                 case AdditionalTypeCodes._ArrayTypeCode: return getType(data, ref index).MakeArrayType();
                 case AdditionalTypeCodes._BoxiedTypeCode: return typeof(Nullable<>).MakeGenericType(getType(data, ref index));
                 case AdditionalTypeCodes._RegisteredTypeCode:
-                {
-                    var exTypeCode = (uint)getInt32(data, ref index);
-                    return _types.GetType(exTypeCode);
-                }
-                case AdditionalTypeCodes._UnregisteredTypeCode:
-                {
-                    var typeName = getString(data, ref index);
-                    lock (_loadedType)
                     {
-                        if (!_loadedType.TryGetValue(typeName, out var type))
-                        {
-                            type = Type.GetType(typeName);
-
-                            if (type == null)
-                                type = AppDomain.CurrentDomain.GetAssemblies().Select(x => x.GetType(typeName)).FirstOrDefault(x => x != null);
-
-                            if (type != null)
-                                _loadedType[typeName] = type;
-                            else
-                                throw new KeyNotFoundException("Unable to resolve type \"" + typeName + "\"");
-                        }
-
-                        return type;
+                        var exTypeCode = (uint)getInt32(data, ref index);
+                        return _types.GetType(exTypeCode);
                     }
-                }
+                case AdditionalTypeCodes._UnregisteredTypeCode:
+                    {
+                        var typeName = getString(data, ref index);
+                        lock (_loadedType)
+                        {
+                            if (!_loadedType.TryGetValue(typeName, out var type))
+                            {
+                                type = Type.GetType(typeName);
+
+                                if (type == null)
+                                    type = AppDomain.CurrentDomain.GetAssemblies().Select(x => x.GetType(typeName)).FirstOrDefault(x => x != null);
+
+                                if (type != null)
+                                    _loadedType[typeName] = type;
+                                else
+                                    throw new KeyNotFoundException("Unable to resolve type \"" + typeName + "\"");
+                            }
+
+                            return type;
+                        }
+                    }
 
                 case TypeCode.Empty: return null;
 
@@ -639,6 +664,9 @@ namespace NiL.Exev
         private unsafe static string getString(byte[] data, ref int index)
         {
             var len = getInt16(data, ref index);
+            if (len == -1)
+                return null;
+
             var buffer = stackalloc char[len];
             for (var i = 0; i < len; i++)
                 buffer[i] = (char)getInt16(data, ref index);

@@ -4,13 +4,13 @@
     {
         public readonly RemoteHub Hub;
         public readonly uint InterfaceId;
-        public readonly int Version;
+        public readonly int ShareId;
 
-        public RemoteHubInterfaceLink(RemoteHub hub, uint interfaceId, int version)
+        public RemoteHubInterfaceLink(RemoteHub hub, uint interfaceId, int shareId)
         {
             Hub = hub;
             InterfaceId = interfaceId;
-            Version = version;
+            ShareId = shareId;
         }
     }
 }

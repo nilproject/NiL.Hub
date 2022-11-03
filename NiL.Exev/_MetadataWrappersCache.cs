@@ -17,7 +17,7 @@ namespace NiL.Exev
         private static readonly Dictionary<MemberInfo, Func<Stack<object>, object>> _ProxiedMembersSetters = new Dictionary<MemberInfo, Func<Stack<object>, object>>();
         private static readonly Dictionary<Type, Func<Stack<object>, object>> _ProxiedDelegates = new Dictionary<Type, Func<Stack<object>, object>>();
         private static readonly Dictionary<Type, MethodInfo[]> _TypeMethods = new Dictionary<Type, MethodInfo[]>();
-        private static readonly Dictionary<Type, MemberInfo[]> _TypeMembers = new Dictionary<Type, MemberInfo[]>();
+        private static readonly Dictionary<Type, MemberInfo[]> _TypeFieldsAndProps = new Dictionary<Type, MemberInfo[]>();
 
         internal static MethodInfo[] GetMethods(Type type)
         {
@@ -187,30 +187,30 @@ namespace NiL.Exev
             return lambda(stack.Pop());
         }
 
-        internal static MemberInfo GetMember(Type type, string memberName)
+        internal static MemberInfo GetFieldOrProp(Type type, string memberName)
         {
-            lock (_TypeMembers)
+            lock (_TypeFieldsAndProps)
             {
-                if (!_TypeMembers.TryGetValue(type, out var members))
+                if (!_TypeFieldsAndProps.TryGetValue(type, out var members))
                 {
                     members = type.GetMembers();
                     if (members != null)
-                        _TypeMembers[type] = members;
+                        _TypeFieldsAndProps[type] = members;
                 }
 
                 return members.FirstOrDefault(x => x.Name == memberName);
             }
         }
 
-        internal static MemberInfo[] GetMembers(Type type)
+        internal static MemberInfo[] GetFieldAndProps(Type type)
         {
-            lock (_TypeMembers)
+            lock (_TypeFieldsAndProps)
             {
-                if (!_TypeMembers.TryGetValue(type, out var members))
+                if (!_TypeFieldsAndProps.TryGetValue(type, out var members))
                 {
                     members = type.GetMembers(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
                     if (members != null)
-                        _TypeMembers[type] = members;
+                        _TypeFieldsAndProps[type] = members = members.Where(x => x is FieldInfo or PropertyInfo).ToArray();
                 }
 
                 return members;

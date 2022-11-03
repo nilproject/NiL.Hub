@@ -6,9 +6,9 @@ using System.Threading.Tasks;
 
 namespace NiL.Hub
 {
-    internal class SharedInterface<IInterface> : SharedInterface, ISharedInterface<IInterface> where IInterface : class
+    internal class SharedInterface<TInterface> : SharedInterface, ISharedInterface<TInterface> where TInterface : class
     {
-        private readonly Hub _hub;
+        private readonly Hub _localHub;
 
         public SharedInterface(Hub hub, string fullName)
             : this(hub, fullName, new List<RemoteHubInterfaceLink>())
@@ -19,19 +19,19 @@ namespace NiL.Hub
         public SharedInterface(Hub hub, string fullName, List<RemoteHubInterfaceLink> remoteHubs)
             : base(fullName, remoteHubs)
         {
-            _hub = hub ?? throw new ArgumentNullException(nameof(hub));
+            _localHub = hub ?? throw new ArgumentNullException(nameof(hub));
         }
 
-        public Task<TResult> Call<TResult>(Expression<Func<IInterface, TResult>> expression, int version = default) => callImpl<TResult>(expression, version);
+        public Task<TResult> Call<TResult>(Expression<Func<TInterface, TResult>> expression, int shareId = default) => callImpl<TResult>(expression, shareId);
 
-        public Task<TResult> Call<TResult>(Expression<Func<IInterface, Task<TResult>>> expression, int version = default) => callImpl<TResult>(expression, version);
+        public Task<TResult> Call<TResult>(Expression<Func<TInterface, Task<TResult>>> expression, int shareId = default) => callImpl<TResult>(expression, shareId);
 
-        private Task<TResult> callImpl<TResult>(Expression expression, int version)
+        private Task<TResult> callImpl<TResult>(Expression expression, int shareId)
         {
-            if (LocalImplementation != null && (version == 0 || LocalVersion == version))
-                return Task.FromResult((TResult)_hub._expressionEvaluator.Eval(expression));
+            if (LocalImplementation != null && (shareId == 0 || LocalShareId == shareId))
+                return Task.FromResult((TResult)_localHub._expressionEvaluator.Eval(expression));
 
-            var taskSource = sendExpression(expression, version);
+            var taskSource = sendExpression(expression, shareId);
 
             return taskSource.Task.ContinueWith(x =>
             {
@@ -43,39 +43,45 @@ namespace NiL.Hub
             });
         }
 
-        private TaskCompletionSource<object> sendExpression(Expression expression, int version)
+        private TaskCompletionSource<object> sendExpression(Expression expression, int shareId)
         {
-            while (Hubs.Count > 0)
+            while (HubLinks.Count > 0)
             {
-                var index = Environment.TickCount % Hubs.Count;
-                var hub = Hubs[index];
+                var index = Environment.TickCount % HubLinks.Count;
+                var hubLink = HubLinks[index];
 
-                if (version != 0 && hub.Version != version)
+                if (shareId != 0 && hubLink.ShareId != shareId)
                 {
-                    for (var i = 0; i < Hubs.Count; i++)
+                    for (var i = 0; i < HubLinks.Count; i++)
                     {
-                        var h = Hubs[(index + i) % Hubs.Count];
-                        if (h.Version == version)
+                        var h = HubLinks[(index + i) % HubLinks.Count];
+                        if (h.ShareId == shareId)
                         {
-                            hub = h;
+                            hubLink = h;
                             break;
                         }
                     }
+
+                    if (hubLink.ShareId != shareId)
+                        throw new ShareNotFoundException(_localHub, typeof(TInterface), shareId);
                 }
 
-                hub.Hub._typesMap.TryAdd(typeof(IInterface), hub.InterfaceId);
+                hubLink.Hub._typesMap.TryAdd(typeof(TInterface), hubLink.InterfaceId);
 
-                var taskSource = _hub.AllocTaskCompletionSource(out var taskAwaitId);
+                var taskSource = _localHub.AllocTaskCompletionSource(out var taskAwaitId);
 
-                var serializedExpression = hub.Hub._expressionSerializer.Serialize(expression, Array.Empty<ParameterExpression>());
+                var serializedExpression = hubLink.Hub._expressionSerializer.Serialize(expression, Array.Empty<ParameterExpression>());
 
                 try
                 {
-                    using var connection = hub.Hub._connections.GetLockedConenction();
+                    using var connection = hubLink.Hub._connections.GetLockedConenction();
                     if (connection == null)
                         continue;
 
-                    connection.Value.WriteRetransmitTo(hub.Hub.Id, c => c.WriteCall(taskAwaitId, serializedExpression));
+                    if (connection.Value.RemoteHub.Id != hubLink.Hub.Id)
+                        connection.Value.WriteRetransmitTo(hubLink.Hub.Id, c => c.WriteCall(taskAwaitId, serializedExpression));
+                    else
+                        connection.Value.WriteCall(taskAwaitId, serializedExpression);
                     connection.Value.FlushOutputBuffer();
 
                     return taskSource;
@@ -89,10 +95,10 @@ namespace NiL.Hub
             throw new InvalidOperationException("All hubs are disconnected");
         }
 
-        public Task Call(Expression<Action<IInterface>> expression, int version = default)
+        public Task Call(Expression<Action<TInterface>> expression, int version = default)
         {
-            if (LocalImplementation != null && (version == 0 || LocalVersion == version))
-                return Task.FromResult(_hub._expressionEvaluator.Eval(expression));
+            if (LocalImplementation != null && (version == 0 || LocalShareId == version))
+                return Task.FromResult(_localHub._expressionEvaluator.Eval(expression));
 
             var taskSource = sendExpression(expression, version);
             var result = taskSource.Task;
