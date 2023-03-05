@@ -67,6 +67,8 @@ namespace NiL.Hub
 
         public bool PathThrough { get; set; }
 
+        public event EventHandler<RemoteHubRegisteredEventArgs> RemoteHubRegistered;
+
         public Hub()
             : this("<unnamed hub >")
         { }
@@ -244,9 +246,9 @@ namespace NiL.Hub
 
                 var worker = new HubConnectionWorker(connection, autoReconnect);
                 worker.StartWorker();
-                
+
                 connection.StartHandshake();
-                
+
                 return connection as IHubConnection;
             });
         }
@@ -695,6 +697,11 @@ namespace NiL.Hub
                     Console.Error.WriteLine(e.Message);
                 }
             });
+        }
+
+        internal virtual void OnRemoteHubRegistered(RemoteHub remoteHub)
+        {
+            RemoteHubRegistered?.Invoke(this, new RemoteHubRegisteredEventArgs { RemoteHub = remoteHub });
         }
     }
 }

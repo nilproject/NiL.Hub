@@ -38,8 +38,28 @@ namespace NiL.Hub
             _canSeek = canSeek;
         }
 
-        public override long Length { get => _length; }
-        public override long Position { get => _position; set => Seek(value, SeekOrigin.Begin); }
+        public override long Length
+        {
+            get
+            {
+                if (_length == long.MaxValue)
+                    throw new NotSupportedException();
+
+                return _length;
+            }
+        }
+        public override long Position
+        {
+            get
+            {
+                if ( _position == long.MaxValue)
+                    throw new NotSupportedException();
+
+                return _position;
+            }
+
+            set => Seek(value, SeekOrigin.Begin);
+        }
         public override bool CanRead { get => _canRead; }
         public override bool CanWrite { get => _canWrite; }
         public override bool CanSeek { get => _canSeek; }

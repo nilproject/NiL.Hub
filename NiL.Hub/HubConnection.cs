@@ -187,17 +187,14 @@ namespace NiL.Hub
                         segments[0] = new ArraySegment<byte>(buffer, len, 2);
                         segments[1] = new ArraySegment<byte>(buffer, 0, len);
 
-                        try
-                        {
-                            _lastActivityTimestamp = DateTime.Now.Ticks;
-                            _socket.Send(segments);
-                        }
-                        catch (SocketException)
-                        {
-                            onDisconnected();
-                            throw new HubDisconnectedException(RemoteHub, _localHub);
-                        }
+                        _lastActivityTimestamp = DateTime.Now.Ticks;
+                        _socket.Send(segments);
                     }
+                }
+                catch (SocketException)
+                {
+                    onDisconnected();
+                    throw new HubDisconnectedException(RemoteHub, _localHub);
                 }
                 finally
                 {

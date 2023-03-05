@@ -1,9 +1,10 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 
 namespace NiL.Hub
 {
-    internal sealed class ConnectionsContainer
+    internal sealed class ConnectionsContainer : IEnumerable<HubConnection>
     {
         private readonly Dictionary<HubConnection, int> _distancesByConnections = new Dictionary<HubConnection, int>();
         private readonly List<List<HubConnection>> _connectionsByDistance = new List<List<HubConnection>>();
@@ -99,5 +100,11 @@ namespace NiL.Hub
                 return int.MaxValue;
             }
         }
+
+        public IEnumerator<HubConnection> GetEnumerator()
+            => _distancesByConnections.Keys.GetEnumerator();
+
+        IEnumerator IEnumerable.GetEnumerator()
+            => GetEnumerator();
     }
 }

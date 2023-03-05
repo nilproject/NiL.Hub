@@ -1,4 +1,6 @@
 ﻿using System.Collections.Generic;
+using System.Linq;
+using System.Net;
 using NiL.Exev;
 
 namespace NiL.Hub
@@ -8,6 +10,8 @@ namespace NiL.Hub
         public string Name { get; internal set; }
         public long Id { get; internal set; }
         public IEnumerable<string> Interfaces => _interfaces;
+
+        public IEnumerable<HubConnection> Connections => _connections;
 
         internal readonly ConnectionsContainer _connections = new ConnectionsContainer();
         internal readonly HashSet<string> _interfaces = new HashSet<string>();
